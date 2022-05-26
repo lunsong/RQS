@@ -3,20 +3,11 @@ from units import cm,g,s
 from scipy.spatial import Delaunay, delaunay_plot_2d
 import matplotlib.pyplot as plt
 
-import sys
-
-#data = np.load('quark_out.npy')
 with open("quark_series") as f:
     data = f.read()
 data = list(map(float, data.strip().split()))
 data = np.array(data)
 data = data.reshape((data.shape[0]//10, 10))
-
-with open("e0_e1") as f:
-    loc = {}
-    exec(f.read(),loc)
-    e_0 = loc["e0"]
-    e_1 = loc["e1"]
 
 r_ratio = data[:,0]
 e       = data[:,1]
@@ -29,14 +20,22 @@ I_45    = data[:,7]
 J       = data[:,8] * M**2
 Mp      = data[:,9]
 
+del data
+
 E = M-Mp
 T = .5 * Omega * J
 V = E-T
 
+with open("e0_e1") as f:
+    loc = {}
+    exec(f.read(),loc)
+    e_0 = loc["e0"]
+    e_1 = loc["e1"]
+
 class InterpError(Exception):
     pass
 
-def interpolate(xs,ys,rescale=True):
+def interpolate(xs,ys,mask=None,rescale=True):
     """xs.shape=(2,N), ys.shape=(M,N) where N is the number of points"""
     if rescale:
         k0 = 1/(np.max(xs[0])-np.min(xs[0]))
@@ -44,8 +43,12 @@ def interpolate(xs,ys,rescale=True):
         l0 = -np.min(xs[0]) * k0
         l1 = -np.min(xs[1]) * k1
         xs = (xs[0]*k0+l0, xs[1]*k1+l1)
-    tri = Delaunay(np.array(xs).T)
+    xs = np.array(xs).T
     ys = np.array(ys).T
+    if not mask is None:
+        xs = xs[mask]
+        ys = ys[mask]
+    tri = Delaunay(xs)
     def f(a,b):
         x = (k0*a+l0,k1*b+l1)
         idx = tri.find_simplex(x)
@@ -63,58 +66,42 @@ def interpolate(xs,ys,rescale=True):
     f.back = lambda a,b: ((a-l0)/k0,(b-l1)/k1)
     return f
 
-M_at_e_j = interpolate((e,J),(M,))
-Omega_e_at_M0_E_0 = interpolate((M0[e<=e_0],E[e<=e_0]),
-        (Omega[e<=e_0],e[e<=e_0]))
-Omega_e_at_M0_J_0 = interpolate((M0[e<=e_0],J[e<=e_0]),
-        (Omega[e<=e_0],e[e<=e_0]))
-Omega_e_at_M0_E_1 = interpolate((M0[e>=e_1],E[e>=e_1]),
-        (Omega[e>=e_1],e[e>=e_1]))
-Omega_e_at_M0_J_1 = interpolate((M0[e>=e_1],J[e>=e_1]),
-        (Omega[e>=e_1],e[e>=e_1]))
 
+#B is the surface magnetic field, R is the radius, both in SI units
+#Returns the magnetic moment in geometric units
 get_m2 = lambda B=1e11, R=1e4:\
         (2*np.pi*R**3*B)**2 / (4*np.pi*1e-7) * 1e13 * g*cm**5*s**-2
-get_m2.__doc__ = """
-B is the surface magnetic field, R is the radius, both in SI units
-Returns the magnetic moment in geometric units"""
 
-def evolve(M0=2,E=None,dt=1e6,m2=get_m2(),N=10000):
+
+Omega_e_at_M0_E_0 = interpolate((M0,E), (Omega,e), e<=e_0)
+Omega_e_at_M0_E_1 = interpolate((M0,E), (Omega,e), e>=e_0)
+J_V_at_M0_E_0 = interpolate((M0,E), (J,V), e<=e_0)
+E_V_at_M0_J_1 = interpolate((M0,J), (E,V), e>=e_1)
+
+def evolve(M0,E,dt=1e6,m2=get_m2(),N=10000):
     """params are in geometric units"""
-    #if T==None: T = max_T(M0)
     t = dt
-    #J_quark = False
     quark = False
     try:
         Omega, e = Omega_e_at_M0_E_0(M0,E)
     except InterpError:
-        #J_quark = T_quark = True
         quark = True
         Omega, e = Omega_e_at_M0_E_1(M0,E)
-    #J = 2*T/Omega
     try:
         for step in range(N):
-            #breakpoint()
             if step%100==0:print(f"{Omega}{' '*10}{T}{' '*10}", end="\n")
-            #if J_quark:
-            #    Omega,e0 = Omega_e_at_M0_J_1(M0,J)
-            #else:
-            #    try:
-            #        Omega,e0 = Omega_e_at_M0_J_0(M0,J)
-            #    except InterpError:
-            #        J_quark = True
-            #        Omega,e0 = Omega_e_at_M0_J_1(M0,J)
-            #dj = m2 * Omega**3 / (6*np.pi)
-            #dm_j = dj * Omega
-            #J -= dt * dj
             if quark:
-                Omega,e = Omega_e_at_M0_T_1(M0,T)
+                Omega,e = Omega_e_at_M0_T_1(M0,E)
             else:
                 try:
-                    Omega,e = Omega_e_at_M0_T_0(M0,T)
+                    Omega,e = Omega_e_at_M0_T_0(M0,E)
                 except InterpError:
                     quark = True
-                    Omega,e = Omega_e_at_M0_T_1(M0,T)
+                    E += dt*dm
+                    J,V0 = J_V_at_M0_E_0(M0,E)
+                    E,V1 = E_V_at_M0_J_1(M0,J)
+                    print(f"phase transition: delta V={V1-V0}")
+                    Omega,e = Omega_e_at_M0_T_1(M0,E)
             dm = m2 * Omega**4 / (6*np.pi)
             E -= dt * dm
             yield t,dm,e
@@ -135,8 +122,8 @@ def plot_res(M0,res):
     ax2.semilogx(res[:,0],res[:,3],label=f"T,$M_0={M0}$")
     ax2.semilogx(res[:,0],res[:,4],label=f"J,$M_0={M0}$")
 
-def run(M0,T=None):
-    res = list(evolve(M0,T=T))
+def run(M0,E):
+    res = list(evolve(M0,E))
     plot_res(M0,res)
 
 def show():
@@ -149,28 +136,6 @@ def show():
     fig.set_size_inches(6,9)
     fig.show()
     fig.savefig("res",dpi=500)
-
-def max_T(M0):
-    def f(T):
-        ans = 0
-        try:
-            Omega_e_at_M0_T_0(M0,T)
-        except InterpError:
-            ans += 1
-        try:
-            Omega_e_at_M0_T_1(M0,T)
-        except InterpError:
-            ans += 1
-        return ans==2
-    T0=0.005
-    T1=0.03
-    while T1-T0>.005:
-        T2 = (T0+T1)/2
-        if f(T2):
-            T1 = T2
-        else:
-            T0 = T2
-    return T0-.005
 
 if __name__ == '__main__':
     run(.206,6.337e-5)
