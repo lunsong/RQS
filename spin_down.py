@@ -53,8 +53,8 @@ def interpolate(xs,ys,mask=None,rescale=True):
         x = (k0*a+l0,k1*b+l1)
         idx = tri.find_simplex(x)
         if idx==-1:
-            #return np.zeros(ys.shape[1])+np.nan
-            raise InterpError(f"out of interp area: {a,b}")
+            return np.zeros(ys.shape[1])+np.nan
+            #raise InterpError(f"out of interp area: {a,b}")
         idx = tri.simplices[idx]
         x1,x2,x3 = tri.points[idx]
         y1,y2,y3 = ys[idx]
@@ -82,36 +82,33 @@ def evolve(M0,T,dt=1e6,m2=get_m2(),N=10000):
     """params are in geometric units"""
     t = dt
     quark = False
-    try:
-        Omega, e = Omega_e_at_M0_T_0(M0,T)
-    except InterpError:
+    Omega, e = Omega_e_at_M0_T_0(M0,T)
+    if np.isnan(e) or e>e_0:
         quark = True
         Omega, e = Omega_e_at_M0_T_1(M0,T)
-    try:
-        for step in range(N):
-            if step%1==0:print(f"{Omega:e} {e:e}", end="\n")
-            if quark:
-                Omega,e = Omega_e_at_M0_T_1(M0,T)
-            else:
-                try:
-                    Omega,e = Omega_e_at_M0_T_0(M0,T)
-                except InterpError:
-                    quark = True
-                    T += dt*dm
-                    J,V0 = J_V_at_M0_T_0(M0,T)
-                    T,V1 = T_V_at_M0_J_1(M0,J)
-                    print(f"phase transition: delta V={V1-V0}")
-                    Omega,e = Omega_e_at_M0_T_1(M0,T)
-            dm = m2 * Omega**4 / (6*np.pi)
-            T -= dt * dm
-            yield t,dm,e
-            t += dt
-    except InterpError:
-        print("run out of interp area")
-        pass
+        if np.isnan(e) or e<e_1:
+            raise InterpError("case 1")
+    for step in range(N):
+        if step%1==0:print(f"{Omega:e} {e:e} {T:e}", end="\n")
+        if not quark:
+            Omega,e = Omega_e_at_M0_T_0(M0,T)
+            if np.isnan(e) or e>e_0:
+                quark = True
+                T += dt*dm
+                J,V0 = J_V_at_M0_T_0(M0,T)
+                T,V1 = T_V_at_M0_J_1(M0,J)
+                print(f"phase transition: delta V={V1-V0}")
+        if quark:
+            Omega,e = Omega_e_at_M0_T_1(M0,T)
+        dm = m2 * Omega**4 / (6*np.pi)
+        T -= dt * dm
+        yield t,dm,e
+        t += dt
+    print("run out of interp area")
+    pass
 
 
-fig, (ax1,ax2) = plt.subplots(2,1,sharex=True)
+#fig, (ax1,ax2) = plt.subplots(2,1,sharex=True)
 
 def plot_res(M0,res):
     res = np.array(res)
@@ -135,10 +132,10 @@ def show():
     fig.show()
     fig.savefig("res",dpi=500)
 
+"""
 if __name__ == '__main__':
     run(.203,5e-5)
     show()
-"""
     run(1.748)
     run(1.493)
     run(1.034)
