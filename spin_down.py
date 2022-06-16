@@ -3,13 +3,30 @@ from units import cm,g,s
 from scipy.spatial import Delaunay, delaunay_plot_2d
 import matplotlib.pyplot as plt
 
+with open("e0_e1") as f:
+    loc = {}
+    exec(f.read(),loc)
+    e_0 = loc["e0"]
+    e_1 = loc["e1"]
+
 with open("quark_series") as f:
     data = f.read()
 data = list(map(float, data.strip().split()))
 data = np.array(data)
 data = data.reshape((data.shape[0]//10, 10))
 
-r_ratio = data[:,0]
+ratio = data[:,0]
+e     = data[:,1]
+mask  = np.concatenate(((True,), abs(ratio[:-1] - ratio[1:])>1e-2))
+for _e in set(e):
+    min_r = min(ratio[e==_e])
+    mask &= ratio != min_r
+
+mask &= ~( (e>=e_1)&(e<=1.08) )
+
+data = data[mask]
+
+ratio   = data[:,0]
 e       = data[:,1]
 M       = data[:,2]
 M0      = data[:,3]
@@ -26,14 +43,18 @@ E = M-Mp
 T = .5 * Omega * J
 V = E-T
 
-with open("e0_e1") as f:
-    loc = {}
-    exec(f.read(),loc)
-    e_0 = loc["e0"]
-    e_1 = loc["e1"]
+def disp(x,y):
+    for _e in e:
+        color = "b" if _e <= e_0 else "g"
+        plt.plot(x[e==_e],y[e==_e],color)
+    plt.show()
 
 class InterpError(Exception):
-    pass
+    def __init__(self, msg, a=None,b=None,x=None):
+        super().__init__(msg)
+        self.a = a
+        self.b = b
+        self.x = x
 
 def interpolate(xs,ys,mask=None,rescale=True):
     """xs.shape=(2,N), ys.shape=(M,N) where N is the number of points"""
@@ -49,12 +70,13 @@ def interpolate(xs,ys,mask=None,rescale=True):
         xs = xs[mask]
         ys = ys[mask]
     tri = Delaunay(xs)
-    def f(a,b):
+    def f(a,b,throw=False):
         x = (k0*a+l0,k1*b+l1)
         idx = tri.find_simplex(x)
         if idx==-1:
+            if throw:
+                raise InterpError(f"out of interp area: {a,b}", a,b,x)
             return np.zeros(ys.shape[1])+np.nan
-            #raise InterpError(f"out of interp area: {a,b}")
         idx = tri.simplices[idx]
         x1,x2,x3 = tri.points[idx]
         y1,y2,y3 = ys[idx]
@@ -117,8 +139,8 @@ def plot_res(M0,res):
     ax1.loglog(res[:,0],res[:,1],label=f"$M_0={M0}$")
     ax2.semilogx(res[:,0],res[:,2],label=f"$M_0={M0}$")
 
-def run(M0,E):
-    res = list(evolve(M0,E))
+def run(M0,*args,**kwargs):
+    res = list(evolve(M0,*args,**kwargs))
     plot_res(M0,res)
 
 def show():
