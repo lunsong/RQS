@@ -218,35 +218,31 @@ class RNS:
 
         return self
 
-    def spin_down(self, ec, dec=1e-2, M0=None, solve=bisect, disp=False):
+    def spin_down(self, ec, dec=1e-2, M0=None, solve=bisect, disp=False,
+            alp=.7):
         if M0==None: M0 = self.M0.value
         def obj(r_ratio):
             self.spin(r_ratio,acc=1e-7)
             #print(f"r_ratio={r_ratio}\tM0={self.M0.value}")
             return (self.M0.value-M0)/M0
         prev = []
+        diff = 1e-2
         while (self.ec < ec) == (dec > 0):
             self.ec += dec
             if len(prev) < 3:
                 r_ratio = self.r_ratio
-                delta = 1e-2
+                # delta = 1e-2
             else:
                 # initial guess according to interpolation
                 r_ratio = 3*prev[2] - 3*prev[1] + prev[0]
-                delta = 1e-4
+                # delta = 1e-4
+            delta = diff
             low, high = r_ratio, r_ratio+delta
             t = time()
             flow, fhigh = obj(low), obj(high)
             function_calls = 2
             skip = False
             while flow*fhigh > 0:
-                if abs(flow) < abs(fhigh):
-                    closest = low, flow
-                else:
-                    closest = high, fhigh
-                if abs(closest[1])<1e-5:
-                    self.spin(closest[0])
-                    skip = True
                 delta *= 2
                 function_calls += 1
                 if fhigh>0:
@@ -260,6 +256,13 @@ class RNS:
                     fhigh = obj(high)
                     if fhigh > 0:
                         return
+                if abs(flow) < abs(fhigh):
+                    closest = low, flow
+                else:
+                    closest = high, fhigh
+                if abs(closest[1])<1e-5:
+                    self.spin(closest[0])
+                    skip = True
                 assert (.6 < low < 1) and (.6 < high < 1), f"{low} {high}"
             if disp: 
                 print("%.5f %.5f %.5f %.5e %.5e" % (
@@ -268,6 +271,7 @@ class RNS:
                 _, msg = solve(obj, low, high, xtol=1e-5, full_output=True)
             t = time() - t
             prev.append(self.r_ratio)
+            diff = diff*(1-alp) + abs(self.r_ratio-r_ratio)*alp
             if len(prev)>3: prev.pop(0)
             if disp:
                 print("%d+%d %.2f %.3e %.3e %.3e %.3e" % (
