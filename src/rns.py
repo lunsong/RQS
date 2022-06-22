@@ -1,21 +1,23 @@
 import numpy as np
+from units import c
+from time import time
 from os.path import exists
 from numpy.ctypeslib import ndpointer
 from ctypes import *
 from subprocess import Popen
 from scipy.interpolate import interp1d
-from scipy.optimize import fsolve, broyden1, basinhopping, ridder
-
-from units import msol, cm, g, s
-from quark_eos import load_eos, load_quark_eos, c, Mb
+from scipy.optimize import (fsolve, broyden1, basinhopping, ridder,
+        toms748)
 
 class RNS:
-    def __init__(self, eos, MDIV=101, SDIV=201):
+    def __init__(self, eos, MDIV=101, SDIV=201, SMAX=.9999, LMAX=10):
         SMAX = .9999
 
-        so_file = f"spin/spin-{MDIV}-{SDIV}.so"
+        so_file = f"spin/spin-{MDIV}-{SDIV}-{SMAX}-{LMAX}.so"
+
         if not exists(so_file):
             cmd = f"gcc -fPIC --shared -DMDIV={MDIV} -DSDIV={SDIV} "\
+                  f"-DSMAX={SMAX} -DLMAX={LMAX} "\
                   f"equil_util.c spin.c nrutil.c -lm -o {so_file}"
             if Popen(cmd.split()).wait() != 0:
                 raise Exception("compilation failed")
@@ -160,8 +162,11 @@ class RNS:
     def ec(self, ec):
         if ec!=None:
             self._ec = ec
-            self.hc = 10**(self.h_at_e(np.log10(ec)))
-            self.pc = 10**(self.p_at_e(np.log10(ec)))
+            try:
+                self.hc = 10**(self.h_at_e(np.log10(ec)))
+                self.pc = 10**(self.p_at_e(np.log10(ec)))
+            except ValueError:
+                raise Exception(f"interp err: ec={ec}")
 
     def sphere(self, ec):
         self.ec = ec
@@ -196,54 +201,42 @@ class RNS:
 
         self.T = .5 * self.Omega.value * self.J.value
 
-    def spin_down(self, de):
-        M0 = self.M0.value
-        ec = self.ec
+        return self
+
+    def spin_down(self, ec, dec=1e-4, M0=None, solve=ridder):
+        if M0==None: M0 = self.M0.value
         def obj(r_ratio):
-            self.spin(r_ratio, print_dif=0)
-            print(f"r_ratio={r_ratio}\tM0={self.M0.value}")
-            return (self.M0.value-M0)/(msol*c**2)
-        undone = True
-        while undone:
-            self.ec = ec + de
-            undone = False
-            try: ridder(obj, self.r_ratio-.1, self.r_ratio+.1)
+            self.spin(r_ratio)
+            #print(f"r_ratio={r_ratio}\tM0={self.M0.value}")
+            return (self.M0.value-M0)/M0
+        prev = []
+        for _ in range(3):
+            #print("spin down:",self.ec,self.r_ratio)
+            self.ec += dec
+            t = time()
+            _,msg = solve(obj, self.r_ratio+.01,self.r_ratio-.01,
+                    full_output=True)
+            t = time()-t
+            #print(msg.function_calls, t, (self.M0.value - M0)/M0)
+            prev.append(self.r_ratio)
+            yield self
+        while (self.ec < ec) == (dec > 0):
+            #print("spin down:",self.ec,self.r_ratio)
+            self.ec += dec
+            r_ratio = prev[0] - 3*prev[1] + 3*prev[2]
+            try:
+                t = time()
+                _,msg = solve(obj, r_ratio+5e-4, r_ratio-5e-4, 
+                        full_output=True)
+                t = time()-t
             except ValueError:
-                undone = True
-                de /= 2.
-                assert de > 1e-5, ValueError("Minimal de archieved")
-                print(f"de={de}")
-
-get_m2 = lambda B=1e11, R=1e4:\
-        (2*np.pi*R**3*B)**2 / (4*np.pi*1e-7) * 1e13 * g*cm**5*s**-2
-
-if __name__ == "__main__":
-    eos = load_quark_eos(e0=.3, e1=1)
-    #eos = load_eos("eosSLy")
-    rns = RNS(eos, 101, 201)
-    rns.sphere(1.)
-    rns.spin(.8)
-    print(f"M0={rns.M0.value}")
-    rns.spin_down(.1)
-"""
-    r_ratio = np.linspace(.999, .6, 20)
-    M0 = []
-    for _r_ration in r_ratio:
-        print(_r_ration)
-        rns.spin(_r_ration,print_dif=0)
-        M0.append(rns.M0.value)
-    #solve = lambda f,x0: fsolve(f,x0,xtol=1e-8,factor=1e10)
-    def solve(f,x0):
-        def g(x):
-            x = f(x)
-            return x[0]*x[0] + x[1]*x[1]
-        return basinhopping(g, x0, T=.1)
-    M0, T = rns.M0.value, rns.T
-    for _T in np.linspace(rns.T, rns.T*0.9, 100):
-        rns.find(T = _T)
-    dt = 1e6
-    B = 1e11 # tesla
-    m2 = get_m2(B, rns.R.value*1e-2)
-    """
-
+                t = time()
+                _,msg = solve(obj, r_ratio+1e-1, r_ratio-1e-1, 
+                        full_output=True)
+                t = time()-t
+            print(msg.function_calls, t, (self.M0.value - M0)/M0)
+            print(f"guess: {r_ratio:3.3e}, real: {self.r_ratio:3.3e} "\
+                  f"diff: {r_ratio-self.r_ratio:3.3e}")
+            prev = prev[1:] + [self.r_ratio]
+            yield self
 
