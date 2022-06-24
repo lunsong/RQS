@@ -60,7 +60,8 @@ double e_at_p(double pp,
 
 
 
-void spin(double s_gp[SDIV+1],
+void spin(double s_gp[],
+	  double DS[],
 	  double mu[MDIV+1],
 	  double log_e_tab[201], 
 	  double log_p_tab[201], 
@@ -155,11 +156,6 @@ double   sum_rho=0.0,         /* intermediate sum in eqn for rho */
          rho_center_h,                 /* rho^hat at center */
          rho_equator_h,                /* rho^hat at equator */ 
          omega_equator_h,              /* omega^hat at equator */         
-         gama_mu_1[SDIV+1],            /* gama at \mu=1 */
-         gama_mu_0[SDIV+1],            /* gama at \mu=0 */
-         rho_mu_1[SDIV+1],             /* rho at \mu=1 */
-         rho_mu_0[SDIV+1],             /* rho at \mu=0 */
-         omega_mu_0[SDIV+1],           /* omega at \mu=0 */
          s_e=0.5,
        **da_dm,
        *dgds,
@@ -182,6 +178,11 @@ double   sum_rho=0.0,         /* intermediate sum in eqn for rho */
          sj1,
          r_e;
  
+    double *gama_mu_1 = malloc(sizeof(double)*(SDIV+1));            /* gama at \mu=1 */
+    double *gama_mu_0 = malloc(sizeof(double)*(SDIV+1));            /* gama at \mu=0 */
+    double *rho_mu_1 = malloc(sizeof(double)*(SDIV+1));             /* rho at \mu=1 */
+    double *rho_mu_0 = malloc(sizeof(double)*(SDIV+1));             /* rho at \mu=0 */
+    double *omega_mu_0 = malloc(sizeof(double)*(SDIV+1));           /* omega at \mu=0 */
 
     f2n = dmatrix(1,LMAX+1,1,SDIV);
     f_rho = f3tensor(1,SDIV,1,LMAX+1,1,SDIV);
@@ -522,11 +523,11 @@ double   sum_rho=0.0,         /* intermediate sum in eqn for rho */
               d_omega_s=0.0;
               d_omega_m=0.0;
             }else{
-                 d_gama_s=deriv_s(gama,s,m);
+                 d_gama_s=deriv_s(gama,s,m,DS);
                  d_gama_m=deriv_m(gama,s,m);
-                 d_rho_s=deriv_s(rho,s,m);
+                 d_rho_s=deriv_s(rho,s,m,DS);
                  d_rho_m=deriv_m(rho,s,m);
-                 d_omega_s=deriv_s(omega,s,m);
+                 d_omega_s=deriv_s(omega,s,m,DS);
                  d_omega_m=deriv_m(omega,s,m);
 	     }
 
@@ -629,7 +630,7 @@ double   sum_rho=0.0,         /* intermediate sum in eqn for rho */
       n=0;
       for(s=1;s<=SDIV;s++) {
             for(k=1;k<=SDIV-2;k+=2) { 
-               sum_rho += (DS/3.0)*( f_rho[s][n+1][k]*D1_rho[n+1][k] 
+               sum_rho += (DS[k+1]/3.0)*( f_rho[s][n+1][k]*D1_rho[n+1][k] 
                           + 4.0*f_rho[s][n+1][k+1]*D1_rho[n+1][k+1]
                           + f_rho[s][n+1][k+2]*D1_rho[n+1][k+2]);
  	    }
@@ -643,25 +644,25 @@ double   sum_rho=0.0,         /* intermediate sum in eqn for rho */
       for(s=1;s<=SDIV;s++)
          for(n=1;n<=LMAX;n++) {
             for(k=1;k<=SDIV-2;k+=2) { 
-               sum_rho += (DS/3.0)*( f_rho[s][n+1][k]*D1_rho[n+1][k] 
+               sum_rho += (DS[k+1]/3.0)*( f_rho[s][n+1][k]*D1_rho[n+1][k] 
                           + 4.0*f_rho[s][n+1][k+1]*D1_rho[n+1][k+1]
                           + f_rho[s][n+1][k+2]*D1_rho[n+1][k+2]);
  
-               sum_gama += (DS/3.0)*( f_gama[s][n+1][k]*D1_gama[n+1][k] 
+               sum_gama += (DS[k+1]/3.0)*( f_gama[s][n+1][k]*D1_gama[n+1][k] 
                            + 4.0*f_gama[s][n+1][k+1]*D1_gama[n+1][k+1]
                            + f_gama[s][n+1][k+2]*D1_gama[n+1][k+2]);
      
                if(k<s && k+2<=s) 
-                 sum_omega += (DS/3.0)*( f_rho[s][n+1][k]*D1_omega[n+1][k] 
+                 sum_omega += (DS[k+1]/3.0)*( f_rho[s][n+1][k]*D1_omega[n+1][k] 
                               + 4.0*f_rho[s][n+1][k+1]*D1_omega[n+1][k+1]
                               + f_rho[s][n+1][k+2]*D1_omega[n+1][k+2]);
                else {
                  if(k>=s) 
-                   sum_omega += (DS/3.0)*( f_gama[s][n+1][k]*D1_omega[n+1][k] 
+                   sum_omega += (DS[k+1]/3.0)*( f_gama[s][n+1][k]*D1_omega[n+1][k] 
                                 + 4.0*f_gama[s][n+1][k+1]*D1_omega[n+1][k+1]
                                 + f_gama[s][n+1][k+2]*D1_omega[n+1][k+2]);
                  else
-                   sum_omega += (DS/3.0)*( f_rho[s][n+1][k]*D1_omega[n+1][k] 
+                   sum_omega += (DS[k+1]/3.0)*( f_rho[s][n+1][k]*D1_omega[n+1][k] 
                                 + 4.0*f_rho[s][n+1][k+1]*D1_omega[n+1][k+1]
                                 + f_gama[s][n+1][k+2]*D1_omega[n+1][k+2]);
                }
@@ -767,7 +768,7 @@ double   sum_rho=0.0,         /* intermediate sum in eqn for rho */
  
       for(s=1;s<=SDIV;s++)
          for(m=1;m<=MDIV;m++) {
-	    dgds[(s-1)*MDIV+m-1]=deriv_s(gama,s,m);
+	    dgds[(s-1)*MDIV+m-1]=deriv_s(gama,s,m,DS);
             dgdm[(s-1)*MDIV+m-1]=deriv_m(gama,s,m);
 	 }
 
@@ -793,14 +794,14 @@ double   sum_rho=0.0,         /* intermediate sum in eqn for rho */
           
                   d_gama_s=dgds[(s-1)*MDIV+m-1];
                   d_gama_m=dgdm[(s-1)*MDIV+m-1];
-                  d_rho_s=deriv_s(rho,s,m);
+                  d_rho_s=deriv_s(rho,s,m,DS);
                   d_rho_m=deriv_m(rho,s,m);
-                  d_omega_s=deriv_s(omega,s,m);
+                  d_omega_s=deriv_s(omega,s,m,DS);
                   d_omega_m=deriv_m(omega,s,m);
-                  d_gama_ss=s1*deriv_s(dgds,s,m)+(1.0-2.0*sgp)
+                  d_gama_ss=s1*deriv_s(dgds,s,m,DS)+(1.0-2.0*sgp)
                                                *d_gama_s;
                   d_gama_mm=m1*deriv_m(dgdm,s,m)-2.0*mum*d_gama_m;  
-                  d_gama_sm=deriv_sm(gama,s,m);
+                  d_gama_sm=deriv_sm(gama,s,m,DS);
 
            temp1=2.0*SQ(sgp)*(sgp/(1.0-sgp))*m1*d_omega_s*d_omega_m
 
@@ -904,8 +905,8 @@ double dm_dr_is(double r_is,
                 double p, 
                 double e_center, 
                 double p_surface,
-                double log_e_tab[SDIV+1],
-                double log_p_tab[SDIV+1],
+                double log_e_tab[],
+                double log_p_tab[],
                 int    n_tab,
                 int    *n_nearest_pt,
                 char eos_type[],
@@ -936,8 +937,8 @@ double dp_dr_is(double r_is,
                 double p,
                 double e_center, 
                 double p_surface,
-                double log_e_tab[SDIV+1],
-                double log_p_tab[SDIV+1],
+                double log_e_tab[],
+                double log_p_tab[],
                 int    n_tab,
                 int    *n_nearest_pt,
                 char eos_type[],
@@ -1166,7 +1167,7 @@ void TOV(
 
 /*C*/
 /*************************************************************************/
-void sphere(double s_gp[SDIV+1], 
+void sphere(double s_gp[], 
 	    double log_e_tab[201], 
 	    double log_p_tab[201], 
 	    double log_h_tab[201],
@@ -1199,11 +1200,12 @@ void sphere(double s_gp[SDIV+1],
         r_is_gp[RDIV+1],
         lambda_gp[RDIV+1],
         nu_gp[RDIV+1],
-        gama_mu_0[SDIV+1],
-        rho_mu_0[SDIV+1],
         gama_eq,
         rho_eq,
         s_e=0.5;
+
+ double *gama_mu_0 = malloc(sizeof(double)*(SDIV+1));
+ double *rho_mu_0 = malloc(sizeof(double)*(SDIV+1));
 
  /* The function TOV integrates the TOV equations. The function
 	can be found in the file equil.c */
@@ -1259,7 +1261,8 @@ void sphere(double s_gp[SDIV+1],
 }
 
 void mass_radius(
-		 double s_gp[SDIV+1],
+		 double s_gp[],
+		 double DS[],
 		 double mu[MDIV+1],
 		 double log_e_tab[201], 
 		 double log_p_tab[201], 
@@ -1307,27 +1310,27 @@ void mass_radius(
    d_rho_s,
    d_omega_s,
    sqrt_v,
-   D_m[SDIV+1],               /* int. quantity for M */
-   D_m_0[SDIV+1],             /* int. quantity for M_0 */ 
-   D_m_p[SDIV+1],             /* int. quantity for M_p */
-   D_J[SDIV+1],               /* int. quantity for J */
    s_e,                 
-   d_o_e[SDIV+1],
-   d_g_e[SDIV+1],
-   d_r_e[SDIV+1],
    //d_v_e[SDIV+1],
    doe,
    dge, 
    dre,
    //dve,
    vek,     
-   gama_mu_0[SDIV+1],                   
-   rho_mu_0[SDIV+1],                    
-   omega_mu_0[SDIV+1],
    J,
    r_p,
    s_p;                 
 
+   double *D_m=malloc(sizeof(double)*(SDIV+1));               /* int. quantity for M */
+   double *D_m_0=malloc(sizeof(double)*(SDIV+1));             /* int. quantity for M_0 */ 
+   double *D_m_p=malloc(sizeof(double)*(SDIV+1));             /* int. quantity for M_p */
+   double *D_J=malloc(sizeof(double)*(SDIV+1));               /* int. quantity for J */
+   double *d_o_e=malloc(sizeof(double)*(SDIV+1));
+   double *d_g_e=malloc(sizeof(double)*(SDIV+1));
+   double *d_r_e=malloc(sizeof(double)*(SDIV+1));
+   double *gama_mu_0=malloc(sizeof(double)*(SDIV+1));                   
+   double *rho_mu_0=malloc(sizeof(double)*(SDIV+1));                    
+   double *omega_mu_0=malloc(sizeof(double)*(SDIV+1));
         
    r_p= r_ratio*r_e;                              /* radius at pole */
    s_p= r_p/(r_p+r_e);                            /* s-coordinate at pole */
@@ -1437,20 +1440,20 @@ void mass_radius(
    }
 
     for(s=1;s<=SDIV-2;s+=2) { 
-     (*Mass) += (SMAX/(3.0*(SDIV-1)))*(pow(sqrt(s_gp[s])/(1.0-s_gp[s]),4.0)*
+     (*Mass) += DS[s+1]/3.0*(pow(sqrt(s_gp[s])/(1.0-s_gp[s]),4.0)*
           D_m[s]+4.0*pow(sqrt(s_gp[s+1])/(1.0-s_gp[s+1]),4.0)*D_m[s+1]
           +pow(sqrt(s_gp[s+2])/(1.0-s_gp[s+2]),4.0)*D_m[s+2]);
 
-     (*Mass_0) += (SMAX/(3.0*(SDIV-1)))*(pow(sqrt(s_gp[s])/(1.0-s_gp[s]),4.0)*
+     (*Mass_0) += DS[s+1]/3.0*(pow(sqrt(s_gp[s])/(1.0-s_gp[s]),4.0)*
           D_m_0[s]+4.0*pow(sqrt(s_gp[s+1])/(1.0-s_gp[s+1]),4.0)*D_m_0[s+1]
           +pow(sqrt(s_gp[s+2])/(1.0-s_gp[s+2]),4.0)*D_m_0[s+2]);
  
-     J += (SMAX/(3.0*(SDIV-1)))*((pow(s_gp[s],3.0)/pow(1.0-s_gp[s],5.0))*
+     J += DS[s+1]/3.0*((pow(s_gp[s],3.0)/pow(1.0-s_gp[s],5.0))*
           D_J[s]+ 4.0*(pow(s_gp[s+1],3.0)/pow(1.0-s_gp[s+1],5.0))*
           D_J[s+1] + (pow(s_gp[s+2],3.0)/pow(1.0-s_gp[s+2],5.0))*
           D_J[s+2]);
 
-     (*Mass_p) += (SMAX/(3.0*(SDIV-1)))*(pow(sqrt(s_gp[s])/(1.0-s_gp[s]),4.0)*
+     (*Mass_p) += DS[s+1]/3.0*(pow(sqrt(s_gp[s])/(1.0-s_gp[s]),4.0)*
           D_m_p[s]+4.0*pow(sqrt(s_gp[s+1])/(1.0-s_gp[s+1]),4.0)*D_m_p[s+1]
           +pow(sqrt(s_gp[s+2])/(1.0-s_gp[s+2]),4.0)*D_m_p[s+2]);
 
@@ -1486,9 +1489,9 @@ void mass_radius(
     s1= s_gp[s]*(1.0-s_gp[s]);
     s_1=1.0-s_gp[s];
         
-    d_gama_s=deriv_s(gama,s,1);
-    d_rho_s=deriv_s(rho,s,1);
-    d_omega_s=deriv_s(omega,s,1);
+    d_gama_s=deriv_s(gama,s,1,DS);
+    d_rho_s=deriv_s(rho,s,1,DS);
+    d_omega_s=deriv_s(omega,s,1,DS);
 
     sqrt_v= exp(-2.0*rho[(s-1)*MDIV+1-1])*r_e*r_e*pow(s_gp[s],4.0)*pow(d_omega_s,2.0) 
             + 2*s1*(d_gama_s+d_rho_s)+s1*s1*(d_gama_s*d_gama_s-d_rho_s*d_rho_s);
@@ -1509,9 +1512,9 @@ void mass_radius(
 /* Kepler angular velocity */
 
    for(s=1;s<=SDIV;s++) { 
-     d_o_e[s]=deriv_s(omega,s,1);
-     d_g_e[s]=deriv_s(gama,s,1);
-     d_r_e[s]=deriv_s(rho,s,1);
+     d_o_e[s]=deriv_s(omega,s,1,DS);
+     d_g_e[s]=deriv_s(gama,s,1,DS);
+     d_r_e[s]=deriv_s(rho,s,1,DS);
      //d_v_e[s]=deriv_s(velocity,s,1);
      /* Value of omega on the equatorial plane*/
      omega_mu_0[s] = omega[(s-1)*MDIV+1-1];

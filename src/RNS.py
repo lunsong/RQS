@@ -18,11 +18,10 @@ class RNS:
     def __init__(self, eos, MDIV=101, SDIV=201, SMAX=.9999, LMAX=10):
         SMAX = .9999
 
-        so_file = f"spin/spin-{MDIV}-{SDIV}-{SMAX}-{LMAX}.so"
+        so_file = f"spin/spin-{MDIV}-{LMAX}.so"
 
         if not exists(so_file):
-            cmd = f"gcc -fPIC --shared -DMDIV={MDIV} -DSDIV={SDIV} "\
-                  f"-DSMAX={SMAX} -DLMAX={LMAX} "\
+            cmd = f"gcc -fPIC --shared -DMDIV={MDIV} -DLMAX={LMAX} "\
                   f"equil_util.c spin.c nrutil.c -lm -o {so_file}"
             if Popen(cmd.split()).wait() != 0:
                 raise RuntimeError("compilation failed")
@@ -32,6 +31,9 @@ class RNS:
         rns.set_transition.argtypes = [c_double, c_double]
 
         self.eos = eos
+
+        self.SDIV = c_int.in_dll(rns, "SDIV")
+        self.SDIV.value = SDIV
 
         rns.sphere.argtypes = [
                 ndpointer(np.float64),
@@ -54,6 +56,7 @@ class RNS:
                 POINTER(c_double)]
 
         rns.spin.argtypes = [
+                ndpointer(np.float64),
                 ndpointer(np.float64),
                 ndpointer(np.float64),
                 ndpointer(np.float64),
@@ -90,6 +93,7 @@ class RNS:
                 ndpointer(np.float64),
                 ndpointer(np.float64),
                 ndpointer(np.float64),
+                ndpointer(np.float64),
                 c_int,
                 c_char_p,
                 c_double,
@@ -115,7 +119,8 @@ class RNS:
                 POINTER(c_double)]
 
         self.mu = np.concatenate(([0],np.linspace(0,1,MDIV)))
-        self.s_gp = np.concatenate(([0],SMAX*np.linspace(0,1,SDIV)))
+        self._s_gp = np.concatenate(([0],SMAX*np.linspace(0,1,SDIV)))
+        self.DS = np.ones_like(self.s_gp) * SMAX / (SDIV - 1)
 
         self.M = c_double(0)
         self.J = c_double(0)
@@ -142,6 +147,32 @@ class RNS:
         self.p_surface = 1.01e-7 * c**-2
         self.e_surface = 7.8e-15
         self.h_min = c**-2
+
+    @property
+    def s_gp(self):
+        return self._s_gp
+
+    @s_gp.setter
+    def s_gp(self, s):
+        interp = lambda x: interp1d(self.s_gp[1:], x, kind="quadratic",
+                axis=0, fill_value="extrapolate")(s[1:])
+
+        self.vp = interp(self.vp)
+        self.vm = interp(self.vm)
+
+        self.rho = interp(self.rho)
+        self.gama = interp(self.gama)
+        self.alpha = interp(self.alpha)
+        self.omega = interp(self.omega)
+        self.energy = interp(self.energy)
+        self.enthalpy = interp(self.enthalpy)
+        self.pressure = interp(self.pressure)
+        self.velocity_sq = interp(self.velocity_sq)
+
+        self.DS = np.concatenate(([0, s[2]-s[1]], (s[2:]-s[:-2])/2,
+            [s[-1]-s[-2]]))
+
+        self.SDIV.value = s.shape[0] - 1
 
     @property
     def values(self):
@@ -196,21 +227,22 @@ class RNS:
 
         n_it = c_int(0)
 
-        self.rns.spin(self.s_gp, self.mu, self.lg_e, self.lg_p, self.lg_h,
-                self.lg_n0, self.n_tab, b'tab', 0., self.hc, self.h_min,
-                self.rho, self.gama, self.alpha, self.omega, self.energy,
-                self.pressure, self.enthalpy, self.velocity_sq, 0, acc,
-                cf, max_n, n_it, print_dif, r_ratio, self.r_e, self.Omega)
+        self.rns.spin(self.s_gp, self.DS, self.mu, self.lg_e, self.lg_p,
+                self.lg_h, self.lg_n0, self.n_tab, b'tab', 0., self.hc,
+                self.h_min, self.rho, self.gama, self.alpha, self.omega,
+                self.energy, self.pressure, self.enthalpy,
+                self.velocity_sq, 0, acc, cf, max_n, n_it, print_dif,
+                r_ratio, self.r_e, self.Omega)
 
         assert n_it.value < max_n, "not converged"
 
-        self.rns.mass_radius(self.s_gp, self.mu, self.lg_e, self.lg_p,
-                self.lg_h, self.lg_n0, self.n_tab, b'tab', 0., self.rho,
-                self.gama, self.alpha, self.omega, self.energy,
-                self.pressure, self.enthalpy, self.velocity_sq,
-                self.r_ratio, self.e_surface, self.r_e, self.Omega,
-                self.M, self.M0, self.J, self.R, self.vp, self.vm,
-                self.Omega_K, self.Mp)
+        self.rns.mass_radius(self.s_gp, self.DS, self.mu, self.lg_e,
+                self.lg_p, self.lg_h, self.lg_n0, self.n_tab, b'tab',
+                0., self.rho, self.gama, self.alpha, self.omega,
+                self.energy, self.pressure, self.enthalpy,
+                self.velocity_sq, self.r_ratio, self.e_surface,
+                self.r_e, self.Omega, self.M, self.M0, self.J, self.R,
+                self.vp, self.vm, self.Omega_K, self.Mp)
 
         self.T = .5 * self.Omega.value * self.J.value
 
