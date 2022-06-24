@@ -27,7 +27,7 @@ class RNS:
                   f"-DSMAX={SMAX} -DLMAX={LMAX} "\
                   f"equil_util.c spin.c nrutil.c -lm -o {so_file}"
             if Popen(cmd.split()).wait() != 0:
-                raise Exception("compilation failed")
+                raise RuntimeError("compilation failed")
 
         rns = cdll.LoadLibrary("./"+so_file)
         self.rns = rns
@@ -181,7 +181,7 @@ class RNS:
                 self.hc = 10**(self.h_at_e(np.log10(ec)))
                 self.pc = 10**(self.p_at_e(np.log10(ec)))
             except ValueError:
-                raise Exception(f"interp err: ec={ec}")
+                raise ValueError(f"interp err: ec={ec}")
 
     def sphere(self, ec):
         self.ec = ec
@@ -204,7 +204,7 @@ class RNS:
                 self.pressure, self.enthalpy, self.velocity_sq, 0, acc,
                 cf, max_n, n_it, print_dif, r_ratio, self.r_e, self.Omega)
 
-        assert n_it.value < max_n, Exception("not converged")
+        assert n_it.value < max_n, "not converged"
 
         self.rns.mass_radius(self.s_gp, self.mu, self.lg_e, self.lg_p,
                 self.lg_h, self.lg_n0, self.n_tab, b'tab', 0., self.rho,
@@ -218,25 +218,18 @@ class RNS:
 
         return self
 
-    def spin_down(self, ec, dec=1e-2, M0=None, solve=bisect, disp=False,
-            alp=.7):
-        if M0==None: M0 = self.M0.value
-        def obj(r_ratio):
-            self.spin(r_ratio,acc=1e-7)
-            #print(f"r_ratio={r_ratio}\tM0={self.M0.value}")
-            return (self.M0.value-M0)/M0
+    def spin_down(self, ec, dec=1e-2, disp=False, alp=.7):
+        M0 = self.M0.value
+        obj = lambda x: self.spin(x,acc=1e-7).M0.value / M0 - 1
         prev = []
-        diff = 1e-2
+        last_err = 1e-2
         while (self.ec < ec) == (dec > 0):
             self.ec += dec
             if len(prev) < 3:
                 r_ratio = self.r_ratio
-                # delta = 1e-2
             else:
-                # initial guess according to interpolation
                 r_ratio = 3*prev[2] - 3*prev[1] + prev[0]
-                # delta = 1e-4
-            delta = diff
+            delta = last_err
             low, high = r_ratio, r_ratio+delta
             t = time()
             flow, fhigh = obj(low), obj(high)
@@ -256,22 +249,13 @@ class RNS:
                     fhigh = obj(high)
                     if fhigh > 0:
                         return
-                if abs(flow) < abs(fhigh):
-                    closest = low, flow
-                else:
-                    closest = high, fhigh
-                if abs(closest[1])<1e-5:
-                    self.spin(closest[0])
-                    skip = True
-                assert (.6 < low < 1) and (.6 < high < 1), f"{low} {high}"
             if disp: 
                 print("%.5f %.5f %.5f %.5e %.5e" % (
                     low,high,delta,obj(low),obj(high)))
-            if not skip:
-                _, msg = solve(obj, low, high, xtol=1e-5, full_output=True)
+            _, msg = ridder(obj, low, high, xtol=1e-5, full_output=True)
             t = time() - t
             prev.append(self.r_ratio)
-            diff = diff*(1-alp) + abs(self.r_ratio-r_ratio)*alp
+            last_err = last_err*(1-alp) + abs(self.r_ratio-r_ratio)*alp
             if len(prev)>3: prev.pop(0)
             if disp:
                 print("%d+%d %.2f %.3e %.3e %.3e %.3e" % (
@@ -279,6 +263,19 @@ class RNS:
                     (self.M0.value-M0)/M0, r_ratio, self.r_ratio,
                     self.r_ratio - r_ratio))
             yield self
+
+    def is_stable(self, dec=1e-4):
+        J = self.J.value
+        M = self.M.value
+        r_ratio = self.r_ratio
+        self.ec += dec
+        res, msg = ridder(lambda x:self.spin(x,acc=1e-7).J.value/J-1,
+                r_ratio-.1, r_ratio+.1, full_output=True)
+        stable = self.M > M
+        self.ec -= dec
+        self.spin(r_ratio)
+        return stable
+        
 
 __all__ = ['get_m2', 'load_eos', 'load_quark_eos', 'c', 'Mb', 'msol',
         'cm', 'g', 'RNS', 'ridder', 'bisect']
