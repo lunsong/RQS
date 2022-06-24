@@ -1,15 +1,13 @@
 import numpy as np
-from units import c,msol,g,cm,s
 from time import time
-from os.path import exists
-from numpy.ctypeslib import ndpointer
+from units import c,msol,g,cm,s
 from ctypes import *
+from os.path import exists
 from subprocess import Popen
-from scipy.interpolate import interp1d
-from scipy.optimize import (fsolve, broyden1, basinhopping, ridder,
-        toms748, bisect)
-
 from collections import namedtuple
+from scipy.optimize import ridder
+from numpy.ctypeslib import ndpointer
+from scipy.interpolate import interp1d
 
 from quark_eos import load_eos, load_quark_eos, Mb
 
@@ -270,13 +268,14 @@ class RNS:
         r_ratio = self.r_ratio
         self.ec += dec
         res, msg = ridder(lambda x:self.spin(x,acc=1e-7).J.value/J-1,
-                r_ratio-.1, r_ratio+.1, full_output=True)
-        stable = self.M > M
+                r_ratio-1e-2, r_ratio+1e-2, full_output=True, xtol=1e-5)
+        print(msg)
+        stable = self.M.value > M
         self.ec -= dec
         self.spin(r_ratio)
         return stable
         
 
 __all__ = ['get_m2', 'load_eos', 'load_quark_eos', 'c', 'Mb', 'msol',
-        'cm', 'g', 'RNS', 'ridder', 'bisect']
+        'cm', 'g', 'RNS', 'ridder']
 
