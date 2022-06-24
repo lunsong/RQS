@@ -15,8 +15,12 @@ get_m2 = lambda B=1e11, R=1e4:\
         (2*np.pi*R**3*B)**2 / (4*np.pi*1e-7) * 1e13 * g*cm**5*s**-2
 
 class RNS:
-    def __init__(self, eos, MDIV=101, SDIV=201, SMAX=.9999, LMAX=10):
-        SMAX = .9999
+    def __init__(self, eos, MDIV=101, SDIV=201, SMAX=.9999, LMAX=10,
+            dx1=5e-3, dx2=1e-3):
+
+        self.dx1 = dx1
+        self.dx2 = dx2
+        self.SMAX = SMAX
 
         so_file = f"spin/spin-{MDIV}-{LMAX}.so"
 
@@ -154,11 +158,11 @@ class RNS:
 
     @s_gp.setter
     def s_gp(self, s):
-        interp = lambda x: interp1d(self.s_gp[1:], x, kind="quadratic",
+        interp = lambda x: interp1d(self.s_gp[1:], x, kind="linear",
                 axis=0, fill_value="extrapolate")(s[1:])
 
-        self.vp = interp(self.vp)
-        self.vm = interp(self.vm)
+        self.vp = np.concatenate(([0],interp(self.vp[1:])))
+        self.vm = np.concatenate(([0],interp(self.vm[1:])))
 
         self.rho = interp(self.rho)
         self.gama = interp(self.gama)
@@ -173,6 +177,8 @@ class RNS:
             [s[-1]-s[-2]]))
 
         self.SDIV.value = s.shape[0] - 1
+
+        self._s_gp = s
 
     @property
     def values(self):
@@ -198,6 +204,10 @@ class RNS:
         self.p_at_e = interp1d(self.lg_e[1:],self.lg_p[1:])
         self.rns.set_transition(eos.start, eos.end)
 
+        if eos.start > 0:
+            self.e0 = eos.e[eos.start-1]/1e15
+            self.e1 = eos.e[eos.end-1]/1e15
+
     @property
     def ec(self):
         return self._ec
@@ -218,8 +228,21 @@ class RNS:
                 self.lg_n0,self.n_tab, b'tab', 0., self.ec, self.pc,
                 self.hc, self.p_surface, self.e_surface, self.rho,
                 self.gama, self.alpha, self.omega, self.r_e)
+
+    def refine(self):
+        if self.ec >= self.e1:
+            mask = self.energy >= self.e1
+            i,j = np.where(mask[:-1] ^ mask[1:])
+            s0 = max(self.s_gp[min(i)+1] - .1, 0)
+            s1 = min(self.s_gp[max(i)+2] + .1, self.SMAX)
+            self.s_gp = np.concatenate((
+                [0],
+                np.mgrid[ 0:       s0:self.dx1],
+                np.mgrid[s0:       s1:self.dx2],
+                np.mgrid[s1:self.SMAX:self.dx1]))
     
-    def spin(self,r_ratio,ec=None,cf=1,acc=1e-5,max_n=100,print_dif=0):
+    def spin(self,r_ratio,ec=None,cf=1,acc=1e-5,max_n=100,print_dif=0,
+            refine=False):
         if not .5<r_ratio<1:
             return
         self.ec = ec
@@ -228,6 +251,17 @@ class RNS:
         n_it = c_int(0)
 
         self.rns.spin(self.s_gp, self.DS, self.mu, self.lg_e, self.lg_p,
+                self.lg_h, self.lg_n0, self.n_tab, b'tab', 0., self.hc,
+                self.h_min, self.rho, self.gama, self.alpha, self.omega,
+                self.energy, self.pressure, self.enthalpy,
+                self.velocity_sq, 0, acc, cf, max_n, n_it, print_dif,
+                r_ratio, self.r_e, self.Omega)
+
+        assert n_it.value < max_n, "not converged"
+
+        if refine:
+           self.refine()
+           self.rns.spin(self.s_gp, self.DS, self.mu, self.lg_e, self.lg_p,
                 self.lg_h, self.lg_n0, self.n_tab, b'tab', 0., self.hc,
                 self.h_min, self.rho, self.gama, self.alpha, self.omega,
                 self.energy, self.pressure, self.enthalpy,
