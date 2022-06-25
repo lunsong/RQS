@@ -126,6 +126,8 @@ class RNS:
         self._s_gp = np.concatenate(([0],SMAX*np.linspace(0,1,SDIV)))
         self.DS = np.ones_like(self.s_gp) * SMAX / (SDIV - 1)
 
+        self.n_it = c_int(0)
+
         self.M = c_double(0)
         self.J = c_double(0)
         self.R = c_double(0)
@@ -173,7 +175,7 @@ class RNS:
         self.pressure = interp(self.pressure)
         self.velocity_sq = interp(self.velocity_sq)
 
-        self.DS = np.concatenate(([0, s[2]-s[1]], (s[2:]-s[:-2])/2,
+        self.DS = np.concatenate(([0, s[2]-s[1]], (s[3:]-s[1:-2])/2,
             [s[-1]-s[-2]]))
 
         self.SDIV.value = s.shape[0] - 1
@@ -230,46 +232,53 @@ class RNS:
                 self.gama, self.alpha, self.omega, self.r_e)
 
     def refine(self):
-        if self.ec >= self.e1:
+        if self.eos.start > 0 and self.ec >= self.e1:
             mask = self.energy >= self.e1
             i,j = np.where(mask[:-1] ^ mask[1:])
-            s0 = max(self.s_gp[min(i)+1] - self.dx1, 0)
-            s1 = min(self.s_gp[max(i)+2] + self.dx1, self.SMAX)
+            #s0 = max(self.s_gp[min(i)+1] - self.dx1, 0)
+            #s1 = min(self.s_gp[max(i)+2] + self.dx1, self.SMAX)
+            s0 = max(self.s_gp[min(i)+1] - .1, 0)
+            s1 = min(self.s_gp[max(i)+2] + .1, self.SMAX)
             s2 = self.SMAX
             self.s_gp = np.concatenate((
                 [0],
                 np.linspace(0,  s0,      int(s0/self.dx1/2)*2+1)[:-1],
                 np.linspace(s0, s1, int((s1-s0)/self.dx2/2)*2+1)[:-1],
                 np.linspace(s1, s2, int((s2-s1)/self.dx1/2)*2+1)))
+            print(f"refine: {s0:.6f} {s1:.6f} step: {self.n_it.value}")
     
-    def spin(self,r_ratio,ec=None,cf=1,acc=1e-5,max_n=100,print_dif=0,
-            refine=False):
+    def spin(self,r_ratio,ec=None,cf=1,acc=1e-5,max_n=20,print_dif=0,
+            throw=True, max_refine=10):
+
         if not .5<r_ratio<1:
             return
+
         self.ec = ec
         self.r_ratio = r_ratio
-
-        n_it = c_int(0)
 
         self.rns.spin(self.s_gp, self.DS, self.mu, self.lg_e, self.lg_p,
                 self.lg_h, self.lg_n0, self.n_tab, b'tab', 0., self.hc,
                 self.h_min, self.rho, self.gama, self.alpha, self.omega,
                 self.energy, self.pressure, self.enthalpy,
-                self.velocity_sq, 0, acc, cf, max_n, n_it, print_dif,
+                self.velocity_sq, 0, acc, cf, max_n, self.n_it, print_dif,
                 r_ratio, self.r_e, self.Omega)
 
-        assert n_it.value < max_n, "not converged"
-
-        while refine and n_it.value > 4:
+        converged = False
+        for refine_step in range(max_refine):
+           if self.n_it.value < 4:
+             converged = True
+             break
            self.refine()
            self.rns.spin(self.s_gp, self.DS, self.mu, self.lg_e, self.lg_p,
                 self.lg_h, self.lg_n0, self.n_tab, b'tab', 0., self.hc,
                 self.h_min, self.rho, self.gama, self.alpha, self.omega,
                 self.energy, self.pressure, self.enthalpy,
-                self.velocity_sq, 0, acc, cf, max_n, n_it, print_dif,
+                self.velocity_sq, 0, acc, cf, max_n, self.n_it, print_dif,
                 r_ratio, self.r_e, self.Omega)
 
-           assert n_it.value < max_n, "not converged"
+        if not converged:
+            if throw: raise RuntimeError("RNS not converged")
+            else: print("RNS not converged")
 
         self.rns.mass_radius(self.s_gp, self.DS, self.mu, self.lg_e,
                 self.lg_p, self.lg_h, self.lg_n0, self.n_tab, b'tab',
