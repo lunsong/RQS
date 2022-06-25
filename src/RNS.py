@@ -259,7 +259,7 @@ class RNS:
 
         assert n_it.value < max_n, "not converged"
 
-        if refine:
+        while refine and n_it.value > 4:
            self.refine()
            self.rns.spin(self.s_gp, self.DS, self.mu, self.lg_e, self.lg_p,
                 self.lg_h, self.lg_n0, self.n_tab, b'tab', 0., self.hc,
@@ -268,7 +268,7 @@ class RNS:
                 self.velocity_sq, 0, acc, cf, max_n, n_it, print_dif,
                 r_ratio, self.r_e, self.Omega)
 
-        assert n_it.value < max_n, "not converged"
+           assert n_it.value < max_n, "not converged"
 
         self.rns.mass_radius(self.s_gp, self.DS, self.mu, self.lg_e,
                 self.lg_p, self.lg_h, self.lg_n0, self.n_tab, b'tab',
