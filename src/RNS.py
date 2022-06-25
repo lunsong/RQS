@@ -233,13 +233,14 @@ class RNS:
         if self.ec >= self.e1:
             mask = self.energy >= self.e1
             i,j = np.where(mask[:-1] ^ mask[1:])
-            s0 = max(self.s_gp[min(i)+1] - .1, 0)
-            s1 = min(self.s_gp[max(i)+2] + .1, self.SMAX)
+            s0 = max(self.s_gp[min(i)+1] - self.dx1, 0)
+            s1 = min(self.s_gp[max(i)+2] + self.dx1, self.SMAX)
+            s2 = self.SMAX
             self.s_gp = np.concatenate((
                 [0],
-                np.mgrid[ 0:       s0:self.dx1],
-                np.mgrid[s0:       s1:self.dx2],
-                np.mgrid[s1:self.SMAX:self.dx1]))
+                np.linspace(0,  s0,      int(s0/self.dx1/2)*2+1)[:-1],
+                np.linspace(s0, s1, int((s1-s0)/self.dx2/2)*2+1)[:-1],
+                np.linspace(s1, s2, int((s2-s1)/self.dx1/2)*2+1)))
     
     def spin(self,r_ratio,ec=None,cf=1,acc=1e-5,max_n=100,print_dif=0,
             refine=False):
@@ -259,7 +260,7 @@ class RNS:
 
         assert n_it.value < max_n, "not converged"
 
-        if refine:
+        while refine and n_it.value > 4:
            self.refine()
            self.rns.spin(self.s_gp, self.DS, self.mu, self.lg_e, self.lg_p,
                 self.lg_h, self.lg_n0, self.n_tab, b'tab', 0., self.hc,
@@ -268,7 +269,7 @@ class RNS:
                 self.velocity_sq, 0, acc, cf, max_n, n_it, print_dif,
                 r_ratio, self.r_e, self.Omega)
 
-        assert n_it.value < max_n, "not converged"
+           assert n_it.value < max_n, "not converged"
 
         self.rns.mass_radius(self.s_gp, self.DS, self.mu, self.lg_e,
                 self.lg_p, self.lg_h, self.lg_n0, self.n_tab, b'tab',
