@@ -15,11 +15,27 @@ get_m2 = lambda B=1e11, R=1e4:\
         (2*np.pi*R**3*B)**2 / (4*np.pi*1e-7) * 1e13 * g*cm**5*s**-2
 
 class RNS:
-    def __init__(self, eos, MDIV=101, SDIV=201, SMAX=.9999, LMAX=10,
-            dx1=5e-3, dx2=1e-3):
+    def __init__(self, MDIV=65, SDIV=201, SMAX=.9999, LMAX=10):
+        """
+        Example:
+        rns = RNS(MDIV=65, SDIV=201)
+        rns.eos = load_quark_eos(.3, 1)
+        rns.cf = .5
+        rns.print_dif = 1
+        rns.max_n = 10
+        rns.max_refine = 20
+        rns.refine_dx = rns.dx / 5
+        rns.refine_range = .1
+        """
 
-        self.dx1 = dx1
-        self.dx2 = dx2
+        # default parameters
+        self.cf           = 1.
+        self.print_dif    = 0
+        self.max_n        = 10
+        self.max_refine   = 20
+        self.refine_dx    = 1e-3
+        self.refine_range = .1
+
         self.SMAX = SMAX
 
         so_file = f"spin/spin-{MDIV}-{LMAX}.so"
@@ -34,10 +50,10 @@ class RNS:
         self.rns = rns
         rns.set_transition.argtypes = [c_double, c_double]
 
-        self.eos = eos
-
         self.SDIV = c_int.in_dll(rns, "SDIV")
         self.SDIV.value = SDIV
+
+        self.initialized = False
 
         rns.sphere.argtypes = [
                 ndpointer(np.float64),
@@ -124,7 +140,8 @@ class RNS:
 
         self.mu = np.concatenate(([0],np.linspace(0,1,MDIV)))
         self._s_gp = np.concatenate(([0],SMAX*np.linspace(0,1,SDIV)))
-        self.DS = np.ones_like(self.s_gp) * SMAX / (SDIV - 1)
+        self.dx = SMAX / (SDIV - 1)
+        self.DS = np.ones_like(self.s_gp) * self.dx
 
         self.n_it = c_int(0)
 
@@ -237,18 +254,19 @@ class RNS:
             i,j = np.where(mask[:-1] ^ mask[1:])
             #s0 = max(self.s_gp[min(i)+1] - self.dx1, 0)
             #s1 = min(self.s_gp[max(i)+2] + self.dx1, self.SMAX)
-            s0 = max(self.s_gp[min(i)+1] - .1, 0)
-            s1 = min(self.s_gp[max(i)+2] + .1, self.SMAX)
+            s0 = max(self.s_gp[min(i)+1] - self.refine_range, 0)
+            s1 = min(self.s_gp[max(i)+2] + self.refine_range, self.SMAX)
             s2 = self.SMAX
+            dx1 = self.dx
+            dx2 = self.refine_dx
             self.s_gp = np.concatenate((
                 [0],
-                np.linspace(0,  s0,      int(s0/self.dx1/2)*2+1)[:-1],
-                np.linspace(s0, s1, int((s1-s0)/self.dx2/2)*2+1)[:-1],
-                np.linspace(s1, s2, int((s2-s1)/self.dx1/2)*2+1)))
+                np.linspace(0,  s0,      int(s0/dx1/2)*2+1)[:-1],
+                np.linspace(s0, s1, int((s1-s0)/dx2/2)*2+1)[:-1],
+                np.linspace(s1, s2, int((s2-s1)/dx1/2)*2+1)))
             print(f"refine: {s0:.6f} {s1:.6f} step: {self.n_it.value}")
     
-    def spin(self,r_ratio,ec=None,cf=1,acc=1e-5,max_n=20,print_dif=0,
-            throw=True, max_refine=10):
+    def spin(self,r_ratio,ec=None, throw=True, max_refine=10):
 
         if not .5<r_ratio<1:
             return
@@ -256,15 +274,17 @@ class RNS:
         self.ec = ec
         self.r_ratio = r_ratio
 
+        if not self.initialized: self.sphere(ec); initialized = True
+
         self.rns.spin(self.s_gp, self.DS, self.mu, self.lg_e, self.lg_p,
                 self.lg_h, self.lg_n0, self.n_tab, b'tab', 0., self.hc,
                 self.h_min, self.rho, self.gama, self.alpha, self.omega,
                 self.energy, self.pressure, self.enthalpy,
-                self.velocity_sq, 0, acc, cf, max_n, self.n_it, print_dif,
-                r_ratio, self.r_e, self.Omega)
+                self.velocity_sq, 0, self.acc, self.cf, self.max_n,
+                self.n_it, self.print_dif, r_ratio, self.r_e, self.Omega)
 
         converged = False
-        for refine_step in range(max_refine):
+        for refine_step in range(self.max_refine):
            if self.n_it.value < 4:
              converged = True
              break
@@ -273,8 +293,8 @@ class RNS:
                 self.lg_h, self.lg_n0, self.n_tab, b'tab', 0., self.hc,
                 self.h_min, self.rho, self.gama, self.alpha, self.omega,
                 self.energy, self.pressure, self.enthalpy,
-                self.velocity_sq, 0, acc, cf, max_n, self.n_it, print_dif,
-                r_ratio, self.r_e, self.Omega)
+                self.velocity_sq, 0, self.acc, self.cf, self.max_n,
+                self.n_it, self.print_dif, r_ratio, self.r_e, self.Omega)
 
         if not converged:
             if throw: raise RuntimeError("RNS not converged")
@@ -294,7 +314,7 @@ class RNS:
 
     def spin_down(self, ec, dec=1e-2, disp=False, alp=.7):
         M0 = self.M0.value
-        obj = lambda x: self.spin(x,acc=1e-7).M0.value / M0 - 1
+        obj = lambda x: self.spin(x).M0.value / M0 - 1
         prev = []
         last_err = 1e-2
         while (self.ec < ec) == (dec > 0):
@@ -343,7 +363,7 @@ class RNS:
         M = self.M.value
         r_ratio = self.r_ratio
         self.ec += dec
-        res, msg = ridder(lambda x:self.spin(x,acc=1e-7).J.value/J-1,
+        res, msg = ridder(lambda x:self.spin(x).J.value/J-1,
                 r_ratio-1e-2, r_ratio+1e-2, full_output=True, xtol=1e-5)
         print(msg)
         stable = self.M.value > M
