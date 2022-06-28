@@ -30,6 +30,7 @@ class RNS:
 
         # default parameters
         self.cf           = 1.
+        self.acc          = 1e-5
         self.print_dif    = 0
         self.max_n        = 10
         self.max_refine   = 20
@@ -274,7 +275,7 @@ class RNS:
         self.ec = ec
         self.r_ratio = r_ratio
 
-        if not self.initialized: self.sphere(ec); initialized = True
+        if not self.initialized: self.sphere(ec); self.initialized = True
 
         self.rns.spin(self.s_gp, self.DS, self.mu, self.lg_e, self.lg_p,
                 self.lg_h, self.lg_n0, self.n_tab, b'tab', 0., self.hc,
