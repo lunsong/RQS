@@ -250,6 +250,7 @@ class RNS:
                 self.gama, self.alpha, self.omega, self.r_e)
 
     def refine(self):
+        """make finer grid around the transition"""
         if self.eos.start > 0 and self.ec >= self.e1:
             mask = self.energy >= self.e1
             i,j = np.where(mask[:-1] ^ mask[1:])
@@ -284,7 +285,10 @@ class RNS:
                 self.velocity_sq, 0, self.acc, self.cf, self.max_n,
                 self.n_it, self.print_dif, r_ratio, self.r_e, self.Omega)
 
-        converged = False
+        if self.max_refine > 0:
+            converged = False
+        else:
+            converged = self.n_it.value < self.max_n
         for refine_step in range(self.max_refine):
            if self.n_it.value < 4:
              converged = True
