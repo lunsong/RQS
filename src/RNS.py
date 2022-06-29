@@ -288,7 +288,7 @@ class RNS:
                 self.lg_h, self.lg_n0, self.n_tab, b'tab', 0., self.hc,
                 self.h_min, self.rho, self.gama, self.alpha, self.omega,
                 self.energy, self.pressure, self.enthalpy,
-                self.velocity_sq, 0, self.acc, self.cf, self.max_n,
+                self.velocity_sq, 0, self.acc, cf(), self.max_n,
                 self.n_it, self.print_dif, r_ratio, self.r_e, self.Omega)
 
         if self.max_refine > 0:
@@ -304,7 +304,7 @@ class RNS:
                 self.lg_h, self.lg_n0, self.n_tab, b'tab', 0., self.hc,
                 self.h_min, self.rho, self.gama, self.alpha, self.omega,
                 self.energy, self.pressure, self.enthalpy,
-                self.velocity_sq, 0, self.acc, self.cf, self.max_n,
+                self.velocity_sq, 0, self.acc, cf(), self.max_n,
                 self.n_it, self.print_dif, r_ratio, self.r_e, self.Omega)
 
         if not converged:
