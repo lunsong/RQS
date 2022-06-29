@@ -37,6 +37,9 @@ class RNS:
         self.refine_dx    = 1e-3
         self.refine_range = .1
 
+        self.cf_random_low = 1.
+        self.cf_random_high = 1.
+
         self.SMAX = SMAX
 
         so_file = f"spin/spin-{MDIV}-{LMAX}.so"
@@ -203,10 +206,10 @@ class RNS:
     @property
     def values(self):
         ans = namedtuple("RNS", ["M","M0","r_ratio", "R", "Omega",
-            "Omega_K", "J","T", "Mp"])
+            "Omega_K", "J","T", "Mp", "ec"])
         return ans(self.M.value, self.M0.value, self.r_ratio, self.R.value,
                 self.Omega.value, self.Omega_K.value, self.J.value,
-                self.T, self.Mp.value)
+                self.T, self.Mp.value, self.ec)
 
     @property
     def eos(self):
@@ -275,6 +278,9 @@ class RNS:
 
         self.ec = ec
         self.r_ratio = r_ratio
+
+        cf = lambda : self.cf * np.random.uniform(self.cf_random_low,
+                self.cf_random_high)
 
         if not self.initialized: self.sphere(ec); self.initialized = True
 
