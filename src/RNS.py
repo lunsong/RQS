@@ -1,6 +1,7 @@
 import numpy as np
 from time import time
 from units import c,msol,g,cm,s
+from bisect import bisect
 from ctypes import *
 from os.path import exists
 from subprocess import Popen
@@ -36,6 +37,13 @@ class RNS:
         self.max_refine   = 20
         self.refine_dx    = 1e-3
         self.refine_range = .1
+        self.criteria     = 4
+
+        # hierarchial grid
+        hierarchy = namedtuple("grid_hierarchy",["dx","length"])
+        dx = SMAX / (SDIV-1)
+        hierarchy.dx = [dx/27, dx/9, dx/3, dx]
+        hierarchy.length = [.01, .03, .09]
 
         self.cf_random_low = 1.
         self.cf_random_high = 1.
@@ -144,7 +152,6 @@ class RNS:
 
         self.mu = np.concatenate(([0],np.linspace(0,1,MDIV)))
         self._s_gp = np.concatenate(([0],SMAX*np.linspace(0,1,SDIV)))
-        self.dx = SMAX / (SDIV - 1)
         self.DS = np.ones_like(self.s_gp) * self.dx
 
         self.n_it = c_int(0)
@@ -257,19 +264,20 @@ class RNS:
         if self.eos.start > 0 and self.ec >= self.e1:
             mask = self.energy >= self.e1
             i,j = np.where(mask[:-1] ^ mask[1:])
-            #s0 = max(self.s_gp[min(i)+1] - self.dx1, 0)
-            #s1 = min(self.s_gp[max(i)+2] + self.dx1, self.SMAX)
-            s0 = max(self.s_gp[min(i)+1] - self.refine_range, 0)
-            s1 = min(self.s_gp[max(i)+2] + self.refine_range, self.SMAX)
-            s2 = self.SMAX
-            dx1 = self.dx
-            dx2 = self.refine_dx
-            self.s_gp = np.concatenate((
-                [0],
-                np.linspace(0,  s0,      int(s0/dx1/2)*2+1)[:-1],
-                np.linspace(s0, s1, int((s1-s0)/dx2/2)*2+1)[:-1],
-                np.linspace(s1, s2, int((s2-s1)/dx1/2)*2+1)))
-            print(f"refine: {s0:.6f} {s1:.6f} step: {self.n_it.value}")
+            s0 = max(self.s_gp[min(i)+1], 0)
+            s1 = min(self.s_gp[max(i)+2], self.SMAX)
+            s_gp = [0,0]
+            s = 0
+            while True:
+                dist = abs(s-s0) + abs(s-s1) - abs(s0-s1)
+                hierarchy = bisect(self.hierarchy.length, dist)
+                ds = self.hierachy.dx[hierachy]
+                s += 2 * ds
+                if s > self.SMAX: break
+                s_gp.extend((s-ds, s))
+            self.s_gp = np.array(s_gp)
+            print(f"refine: {s0:.6f} {s1:.6f} {self.DSIV.value}"\
+                  f"step: {self.n_it.value}")
     
     def spin(self,r_ratio,ec=None, throw=True, max_refine=10):
 
@@ -296,7 +304,7 @@ class RNS:
         else:
             converged = self.n_it.value < self.max_n
         for refine_step in range(self.max_refine):
-           if self.n_it.value < 4:
+           if self.n_it.value < self.criteria:
              converged = True
              break
            self.refine()
