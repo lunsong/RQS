@@ -296,14 +296,6 @@ class RNS:
                 self.lg_h, self.lg_n0, self.n_tab, b'tab', 0., self.hc,
                 self.h_min, self.rho, self.gama, self.alpha, self.omega,
                 self.energy, self.pressure, self.enthalpy,
-<<<<<<< HEAD
-                self.velocity_sq, 0, acc, cf, max_n, n_it, print_dif,
-                r_ratio, self.r_e, self.Omega)
-
-        assert n_it.value < max_n, "not converged"
-
-        while refine and n_it.value > 4:
-=======
                 self.velocity_sq, 0, self.acc, cf(), self.max_n,
                 self.n_it, self.print_dif, r_ratio, self.r_e, self.Omega)
 
@@ -315,7 +307,6 @@ class RNS:
            if self.n_it.value < self.criteria:
              converged = True
              break
->>>>>>> multigrid-hierarchy
            self.refine()
            self.rns.spin(self.s_gp, self.DS, self.mu, self.lg_e, self.lg_p,
                 self.lg_h, self.lg_n0, self.n_tab, b'tab', 0., self.hc,
@@ -324,13 +315,9 @@ class RNS:
                 self.velocity_sq, 0, self.acc, cf(), self.max_n,
                 self.n_it, self.print_dif, r_ratio, self.r_e, self.Omega)
 
-<<<<<<< HEAD
-           assert n_it.value < max_n, "not converged"
-=======
         if not converged:
             if throw: raise RuntimeError("RNS not converged")
             else: print("RNS not converged")
->>>>>>> multigrid-hierarchy
 
         self.rns.mass_radius(self.s_gp, self.DS, self.mu, self.lg_e,
                 self.lg_p, self.lg_h, self.lg_n0, self.n_tab, b'tab',
