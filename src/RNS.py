@@ -25,8 +25,8 @@ class RNS:
         rns.print_dif = 1
         rns.max_n = 10
         rns.max_refine = 20
-        rns.refine_dx = rns.dx / 5
-        rns.refine_range = .1
+        hierarchy.dx = [dx/27, dx/9, dx/3, dx]
+        hierarchy.length = [.01, .03, .09]
         """
 
         # default parameters
@@ -35,8 +35,6 @@ class RNS:
         self.print_dif    = 0
         self.max_n        = 10
         self.max_refine   = 20
-        self.refine_dx    = 1e-3
-        self.refine_range = .1
         self.criteria     = 4
 
         # hierarchial grid
@@ -44,6 +42,8 @@ class RNS:
         dx = SMAX / (SDIV-1)
         hierarchy.dx = [dx/27, dx/9, dx/3, dx]
         hierarchy.length = [.01, .03, .09]
+        self.hierarchy = hierarchy
+        self.dx = dx
 
         self.cf_random_low = 1.
         self.cf_random_high = 1.
@@ -271,12 +271,12 @@ class RNS:
             while True:
                 dist = abs(s-s0) + abs(s-s1) - abs(s0-s1)
                 hierarchy = bisect(self.hierarchy.length, dist)
-                ds = self.hierachy.dx[hierachy]
+                ds = self.hierarchy.dx[hierarchy]
                 s += 2 * ds
                 if s > self.SMAX: break
                 s_gp.extend((s-ds, s))
             self.s_gp = np.array(s_gp)
-            print(f"refine: {s0:.6f} {s1:.6f} {self.DSIV.value}"\
+            print(f"refine: {s0:.6f} {s1:.6f} {self.SDIV.value}"\
                   f"step: {self.n_it.value}")
     
     def spin(self,r_ratio,ec=None, throw=True, max_refine=10):
