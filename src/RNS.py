@@ -224,6 +224,7 @@ class RNS:
 
     @eos.setter
     def eos(self, eos):
+        self.cache = dict()
         self._eos = eos
         self.lg_e = np.concatenate(([0],np.log10(eos.e/1e15)))
         self.lg_p = np.concatenate(([0],np.log10(eos.p/1e15/c**2)))
@@ -281,11 +282,13 @@ class RNS:
     
     def spin(self,r_ratio,ec=None, throw=True, max_refine=10):
 
-        if not .5<r_ratio<1:
-            return
+        assert .5 < r_ratio < 1, f"spin(r_ratio={r_ratio})"
 
         self.ec = ec
         self.r_ratio = r_ratio
+
+        if (self.ec, self.r_ratio) in self.cache:
+            return self.cache[(self.ec, self.r_ratio)]
 
         cf = lambda : self.cf * np.random.uniform(self.cf_random_low,
                 self.cf_random_high)
@@ -329,11 +332,16 @@ class RNS:
 
         self.T = .5 * self.Omega.value * self.J.value
 
-        return self
+        self.cache[(self.ec, self.r_ratio)] = self.values
+
+        return self.values
 
     def spin_down(self, ec, dec=1e-2, disp=False, alp=.7):
         M0 = self.M0.value
-        obj = lambda x: self.spin(x).M0.value / M0 - 1
+        def foo(x):
+            print(x)
+            return x
+        obj = lambda x: self.spin(foo(x)).M0 / M0 - 1
         prev = []
         last_err = 1e-2
         while (self.ec < ec) == (dec > 0):
@@ -362,6 +370,10 @@ class RNS:
                     fhigh = obj(high)
                     if fhigh > 0:
                         return
+                if low<.5:
+                    low = .5001
+                    flow = obj(low)
+                    assert flow < 0
             if disp: 
                 print("%.5f %.5f %.5f %.5e %.5e" % (
                     low,high,delta,obj(low),obj(high)))
@@ -382,7 +394,7 @@ class RNS:
         M = self.M.value
         r_ratio = self.r_ratio
         self.ec += dec
-        res, msg = ridder(lambda x:self.spin(x).J.value/J-1,
+        res, msg = ridder(lambda x:self.spin(x).J/J-1,
                 r_ratio-1e-2, r_ratio+1e-2, full_output=True, xtol=1e-5)
         print(msg)
         stable = self.M.value > M
