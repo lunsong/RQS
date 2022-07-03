@@ -40,9 +40,9 @@ class RNS:
         # hierarchial grid
         hierarchy = namedtuple("grid_hierarchy",["dx","length"])
         dx = SMAX / (SDIV-1)
-        hierarchy.dx = [dx/27, dx/9, dx/3, dx]
-        hierarchy.length = [.01, .03, .09]
-        self.hierarchy = hierarchy
+        self.hierarchy = hierarchy(
+                dx = [dx/27, dx/9, dx/3, dx],
+                length = [.01, .03, .09])
         self.dx = dx
 
         self.cf_random_low = 1.
@@ -336,12 +336,16 @@ class RNS:
 
         return self.values
 
-    def spin_down(self, ec, dec=1e-2, disp=False, alp=.7):
-        M0 = self.M0.value
+    def spin_down(self, ec, dec=1e-2, M0=None, disp=False, alp=.7):
         def foo(x):
             print(x)
             return x
         obj = lambda x: self.spin(foo(x)).M0 / M0 - 1
+        if M0==None:
+            M0 = self.M0.value 
+        else:
+            print("spin_down: init")
+            ridder(obj, .6, .999, xtol=1e-5)
         prev = []
         last_err = 1e-2
         while (self.ec < ec) == (dec > 0):
