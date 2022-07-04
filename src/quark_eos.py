@@ -52,10 +52,6 @@ def quark_eos(e0,e1=None,eos="eosSLy",regenerate=False, ofile=None):
 
     assert e1>e0, ValueError(f"e0={e0:e} should be smaller than e1={e1:e}")
 
-    print(f"e0={e0:e} e1={e1:e}")
-    #with open("e0_e1","w") as f:
-    #    f.write(f"e0={e0/1e15}\ne1={e1/1e15}")
-
     if regenerate:
         p_at_e_new = p_at_e
         enew = e
