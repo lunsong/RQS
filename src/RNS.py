@@ -36,6 +36,7 @@ class RNS:
         self.max_n        = 10
         self.max_refine   = 20
         self.criteria     = 4
+        self.throw        = True
 
         # hierarchial grid
         hierarchy = namedtuple("grid_hierarchy",["dx","length"])
@@ -280,9 +281,9 @@ class RNS:
             print(f"refine: {s0:.6f} {s1:.6f} {self.SDIV.value}"\
                   f"step: {self.n_it.value}")
     
-    def spin(self,r_ratio,ec=None, throw=True, max_refine=10):
+    def spin(self,r_ratio,ec=None, max_refine=10):
 
-        assert .5 < r_ratio < 1, f"spin(r_ratio={r_ratio})"
+        assert .5 < r_ratio <= 1, f"spin(r_ratio={r_ratio})"
 
         self.ec = ec
         self.r_ratio = r_ratio
@@ -319,7 +320,7 @@ class RNS:
                 self.n_it, self.print_dif, r_ratio, self.r_e, self.Omega)
 
         if not converged:
-            if throw: raise RuntimeError("RNS not converged")
+            if self.throw: raise RuntimeError("RNS not converged")
             else: print("RNS not converged")
 
         self.rns.mass_radius(self.s_gp, self.DS, self.mu, self.lg_e,
@@ -355,7 +356,7 @@ class RNS:
             else:
                 r_ratio = 3*prev[2] - 3*prev[1] + prev[0]
             delta = last_err
-            low, high = r_ratio, r_ratio+delta
+            low, high = r_ratio-delta, r_ratio+delta
             t = time()
             flow, fhigh = obj(low), obj(high)
             function_calls = 2
@@ -365,19 +366,20 @@ class RNS:
                 function_calls += 1
                 if fhigh>0:
                     low, high = high, high+delta
-                    flow,fhigh = fhigh, obj(high)
+                    if high > 1.:
+                        high = .9999
+                        flow,fhigh = fhigh, obj(high)
+                        if fhigh > 0.: return
+                    else:
+                        flow,fhigh = fhigh, obj(high)
                 else:
                     low, high = low-delta, low
-                    flow,fhigh = obj(low), flow
-                if high>1:
-                    high = .9999
-                    fhigh = obj(high)
-                    if fhigh > 0:
-                        return
-                if low<.5:
-                    low = .5001
-                    flow = obj(low)
-                    assert flow < 0
+                    if low <  .5:
+                        low = .5001
+                        flow,fhigh = obj(low), flow
+                        if flow < 0.: return
+                    else:
+                        flow,fhigh = obj(low), flow
             if disp: 
                 print("%.5f %.5f %.5f %.5e %.5e" % (
                     low,high,delta,obj(low),obj(high)))
