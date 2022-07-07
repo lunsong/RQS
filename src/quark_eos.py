@@ -1,5 +1,6 @@
 import numpy as np
-from scipy.interpolate import interp1d
+from scipy.interpolate import (interp1d, UnivariateSpline,
+        CubicSpline)
 from scipy.integrate import solve_ivp, quad
 
 from os.path import exists
@@ -41,11 +42,13 @@ def quark_eos(e0,e1=None,eos="eosSLy",regenerate=False, ofile=None):
     _rho_at_e = interp1d(lge,lgrho,kind="quadratic")
     rho_at_e = lambda x:np.exp(_rho_at_e(np.log(x)))
 
-    _p_at_e = interp1d(lge,lgp,kind="quadratic")
+    _p_at_e = CubicSpline(lge,lgp)
+    _dp_de = _p_at_e.derivative()
     p_at_e = lambda x:np.exp(_p_at_e(np.log(x)))
 
     p0 = p_at_e(e0)
-    p1 = p0*(1+1e-8)
+    #p1 = p0*(1+1e-8)
+    p1 = p0
     if e1==None:
         B = 8.3989e34 / c**2
         e1 = 3*p0/c**2+4*B
@@ -54,6 +57,7 @@ def quark_eos(e0,e1=None,eos="eosSLy",regenerate=False, ofile=None):
 
     if regenerate:
         p_at_e_new = p_at_e
+        dp_de = lambda e: p_at_e(e) / e * _dp_de(np.log(e))
         enew = e
     else:
         def p_at_e_new(e):
@@ -62,6 +66,13 @@ def quark_eos(e0,e1=None,eos="eosSLy",regenerate=False, ofile=None):
             if e<e1:
                 return p0*(e-e1)/(e0-e1)+p1*(e-e0)/(e1-e0)
             return c**2*(e-e1)/3+p1
+        def dp_de(e):
+            if e<e0:
+                return p_at_e(e) / e * _dp_de(np.log(e)) 
+            if e<e1:
+                return 0;
+            return c**2 / 3.
+
         enew = np.concatenate((
             e[e<e0],
             np.linspace(e0,e1,10),
@@ -69,16 +80,13 @@ def quark_eos(e0,e1=None,eos="eosSLy",regenerate=False, ofile=None):
     #enew = e
     pnew = np.array(list(map(p_at_e_new, enew)))
 
-    eps = (e/rho - 1)*c**2
     rhonew = solve_ivp(lambda t,y: y / (t+p_at_e_new(t)/c**2),
             (e[0],e[-1]), (rho[0],), t_eval=enew, rtol=3e-14).y[0]
 
     nnew = rhonew / Mb
 
-    enew_at_pnew = interp1d(np.log(pnew[(enew<e0)|(enew>=e1)])
-        ,np.log(enew[(enew<e0)|(enew>=e1)]),kind="quadratic")
-    hnew = solve_ivp(lambda t,y:1/(np.exp(enew_at_pnew(np.log(t)))+t/c**2),
-            (pnew[0],pnew[-1]),(h[0],),t_eval=pnew,rtol=1e-14).y[0]
+    hnew = solve_ivp(lambda t,y:dp_de(t)/(t+p_at_e_new(t)/c**2),
+            (enew[0],enew[-1]),(h[0],),t_eval=enew,rtol=1e-14).y[0]
 
     if regenerate:
         perr = max(abs((pnew-p)/p))
