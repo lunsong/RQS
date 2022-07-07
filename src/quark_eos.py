@@ -105,7 +105,7 @@ def quark_eos(e0,e1=None,eos="eosSLy",regenerate=False, ofile=None):
                 sum(enew<=e1))
 
 def load_quark_eos(e0,e1,base="eosSLy"):
-    file = f"quark_eos/{e0}-{e1}.eos"
+    file = f"quark_eos/{base}-{e0}-{e1}.eos"
     if not exists(file):
         quark_eos(e0*1e15,e1*1e15,ofile=file)
     return load_eos(file)
