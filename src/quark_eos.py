@@ -25,7 +25,10 @@ def load_eos(eos):
     e,p,h,n = x.T
     return EOS(e,p,h,n,int(n_tab),int(start),int(end))
 
-def quark_eos(e0,e1=None,eos="eosSLy",regenerate=False, ofile=None):
+def quark_eos(e0,e1=None,eos="eosSLy",regenerate=False, ofile=None,
+        model="model-1"):
+def quark_eos(e0,e1,neutron_eos,regenerate,ofile,
+        construction,sound_speed,Gibbs_Gamma):
     """
     e0,e1 are the start and the end of phase transition, in 1e15
     eos is the base eos, default eosSLy
@@ -64,7 +67,11 @@ def quark_eos(e0,e1=None,eos="eosSLy",regenerate=False, ofile=None):
             if e<e0:
                 return p_at_e(e)
             if e<e1:
-                return p0*(e-e1)/(e0-e1)+p1*(e-e0)/(e1-e0)
+                if construction=="Maxwell":
+                    return p0*(e-e1)/(e0-e1)+p1*(e-e0)/(e1-e0)
+                elif construction=="Gibbs":
+                    return 
+                else: raise ValueError("invalid construction")
             return c**2*(e-e1)/3+p1
         def dp_de(e):
             if e<e0:
