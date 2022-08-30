@@ -3,6 +3,8 @@ from scipy.interpolate import (interp1d, UnivariateSpline,
         CubicSpline)
 from scipy.integrate import solve_ivp, quad
 
+from scipy.optimize import ridder
+
 from os.path import exists
 
 from collections import namedtuple
@@ -25,10 +27,8 @@ def load_eos(eos):
     e,p,h,n = x.T
     return EOS(e,p,h,n,int(n_tab),int(start),int(end))
 
-def quark_eos(e0,e1=None,eos="eosSLy",regenerate=False, ofile=None,
-        model="model-1"):
-def quark_eos(e0,e1,neutron_eos,regenerate,ofile,
-        construction,sound_speed,Gibbs_Gamma):
+def quark_eos(e0,e1,eos="eosSLy", construction="Maxwell",
+        ss=1/np.sqrt(3),Gama=1.03):
     """
     e0,e1 are the start and the end of phase transition, in 1e15
     eos is the base eos, default eosSLy
@@ -38,12 +38,8 @@ def quark_eos(e0,e1,neutron_eos,regenerate,ofile,
     """
 
     e,p,h,n,_,_,_ = load_eos(eos)
-    lge,lgp,lgh,lgn = map(np.log, (e,p,h,n))
+    lge,lgp = map(np.log, (e,p))
     rho = n*Mb
-    lgrho = np.log(rho)
-
-    _rho_at_e = interp1d(lge,lgrho,kind="quadratic")
-    rho_at_e = lambda x:np.exp(_rho_at_e(np.log(x)))
 
     _p_at_e = CubicSpline(lge,lgp)
     _dp_de = _p_at_e.derivative()
@@ -58,58 +54,64 @@ def quark_eos(e0,e1,neutron_eos,regenerate,ofile,
 
     assert e1>e0, ValueError(f"e0={e0:e} should be smaller than e1={e1:e}")
 
-    if regenerate:
-        p_at_e_new = p_at_e
-        dp_de = lambda e: p_at_e(e) / e * _dp_de(np.log(e))
-        enew = e
-    else:
-        def p_at_e_new(e):
+    if construction=="Maxwell":
+        def p_at_e(e):
             if e<e0:
                 return p_at_e(e)
             if e<e1:
-                if construction=="Maxwell":
-                    return p0*(e-e1)/(e0-e1)+p1*(e-e0)/(e1-e0)
-                elif construction=="Gibbs":
-                    return 
-                else: raise ValueError("invalid construction")
-            return c**2*(e-e1)/3+p1
+                return p0*(e-e1)/(e0-e1)+p1*(e-e0)/(e1-e0)
+            return c**2*(e-e1) * ss**2+p1
         def dp_de(e):
             if e<e0:
                 return p_at_e(e) / e * _dp_de(np.log(e)) 
             if e<e1:
                 return 0;
-            return c**2 / 3.
+            return c**2 * ss**2.
 
-        enew = np.concatenate((
+        e = np.concatenate((
             e[e<e0],
             np.linspace(e0,e1,10),
             np.linspace(e1,e[-1],80)[1:]))
+    elif construction=="Gibbs":
+        A = (e0 - p0/c**2/(Gama-1)) * p0**(-1/Gama)
+        poly = lambda p: A*p**(1/Gama)+p/c**2/(Gama-1)
+        p1 = ridder(lambda p: poly(p)-e1, p0, p0*10)
+        def p_at_e(e):
+            if e<e0:
+                return p_at_e(e)
+            if e<e1:
+                return ridder(lambda p: poly(p)-e, p0,p1)
+            return c**2*(e-e1) * ss**2 + p1
+        def dp_de(e):
+            if e<e0:
+                return p_at_e(e) / e * _dp_de(np.log(e)) 
+            if e<e1:
+                p = p_at_e(e)
+                return 1/(A/Gama*rho**(1/Gama-1)+1/c**2/(Gama-1))
+            return c**2 * ss**2
+        e = np.concatenate((
+            e[e<e0],
+            np.linspace(e0,e1,30),
+            np.linspace(e1,e[-1],80)[1:]))
+
     #enew = e
-    pnew = np.array(list(map(p_at_e_new, enew)))
+    p = np.array(list(map(p_at_e, e)))
 
-    rhonew = solve_ivp(lambda t,y: y / (t+p_at_e_new(t)/c**2),
-            (e[0],e[-1]), (rho[0],), t_eval=enew, rtol=3e-14).y[0]
+    rho = solve_ivp(lambda t,y: y / (t+p_at_e(t)/c**2),
+            (e[0],e[-1]), (rho[0],), t_eval=e, rtol=3e-14).y[0]
 
-    nnew = rhonew / Mb
+    n = rho / Mb
 
-    hnew = solve_ivp(lambda t,y:dp_de(t)/(t+p_at_e_new(t)/c**2),
-            (enew[0],enew[-1]),(h[0],),t_eval=enew,rtol=1e-14).y[0]
+    h = solve_ivp(lambda t,y:dp_de(t)/(t+p_at_e(t)/c**2),
+            (e[0],e[-1]),(h[0],),t_eval=e,rtol=1e-14).y[0]
 
-    if regenerate:
-        perr = max(abs((pnew-p)/p))
-        nerr = max(abs((nnew-n)/n))
-        eerr = max(abs((enew-e)/e))
-        herr = max(abs((hnew-h)/h))
-        print(f"p {perr} n {nerr} e {eerr} h {herr}")
-    elif ofile != None:
+    return EOS(e,p,h,n,e.shape[0],sum(e<=e0), sum(e<=e1))
+    if ofile != None:
         with open(ofile, "w") as f:
             f.write(f"{enew.shape[0]} {sum(enew<=e0)} {sum(enew<=e1)}\n")
             #f.write(f"{enew.shape[0]}\n")
             for e,p,h,n in zip(enew,pnew,hnew,nnew):
                 f.write(f"{e:.16e} {p:.16e} {h:.16e} {n:.16e}\n")
-    else:
-        return EOS(enew,pnew,hnew,nnew,enew.shape[0],sum(enew<=e0),
-                sum(enew<=e1))
 
 def load_quark_eos(e0,e1,base="eosSLy"):
     file = f"quark_eos/{base}-{e0}-{e1}.eos"
