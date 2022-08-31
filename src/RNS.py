@@ -10,8 +10,6 @@ from scipy.optimize import ridder
 from numpy.ctypeslib import ndpointer
 from scipy.interpolate import interp1d
 
-from quark_eos import load_eos, load_quark_eos, Mb
-
 get_m2 = lambda B=1e11, R=1e4:\
         (2*np.pi*R**3*B)**2 / (4*np.pi*1e-7) * 1e13 * g*cm**5*s**-2
 
@@ -54,7 +52,7 @@ class RNS:
         so_file = f"spin/spin-{MDIV}-{LMAX}.so"
 
         if not exists(so_file):
-            cmd = f"gcc -fPIC --shared -DMDIV={MDIV} -DLMAX={LMAX} "\
+            cmd = f"gcc -O3 -fPIC --shared -DMDIV={MDIV} -DLMAX={LMAX} "\
                   f"equil_util.c spin.c nrutil.c -lm -o {so_file}"
             if Popen(cmd.split()).wait() != 0:
                 raise RuntimeError("compilation failed")
@@ -264,7 +262,7 @@ class RNS:
     def refine(self):
         """make finer grid around the transition"""
         if self.eos.start > 0 and self.ec >= self.e1:
-            mask = self.energy >= self.e1
+            mask = (self.energy >= self.e1) | (self.energy <= self.e0)
             i,j = np.where(mask[:-1] ^ mask[1:])
             s0 = max(self.s_gp[min(i)+1], 0)
             s1 = min(self.s_gp[max(i)+2], self.SMAX)
@@ -409,6 +407,5 @@ class RNS:
         return stable
         
 
-__all__ = ['get_m2', 'load_eos', 'load_quark_eos', 'c', 'Mb', 'msol',
-        'cm', 'g', 'RNS', 'ridder']
+__all__ = ['get_m2', 'c', 'msol', 'cm', 'g', 'RNS', 'ridder']
 
