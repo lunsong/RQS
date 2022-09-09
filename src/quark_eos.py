@@ -36,11 +36,11 @@ def quark_eos(e0,e1,eos="eosSLy", construction="Maxwell",
     assert e1>e0, ValueError("e1<=e0!")
 
     def p_at_e(e):
-        if e<e0: return p_at_e_old(e)
+        if e<=e0: return p_at_e_old(e)
         if e<e1: return p_at_e_tr(e)
         return c**2*(e-e1) * ss**2 + p1
     def dp_de(e):
-        if e<e0: return p_at_e(e) / e * _dp_de(np.log(e)) 
+        if e<=e0: return p_at_e(e) / e * _dp_de(np.log(e)) 
         if e<e1: return dp_de_tr(e)
         return c**2 * ss**2
 
