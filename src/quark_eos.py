@@ -26,6 +26,8 @@ def quark_eos(e0,e1,e2=None,e_qcd=None,eos="eosSLy",
     if e2 != None: e2 *= 1e15
     if e_qcd != None: e_qcd *= 1e15
 
+    #==================== the skeleton =====================#
+
     def p_at_e(e):
         if e<=e0: return p_at_e_old(e)
         if e<e1: return p_at_e_tr(e)
@@ -35,7 +37,7 @@ def quark_eos(e0,e1,e2=None,e_qcd=None,eos="eosSLy",
         if e<e1: return dp_de_tr(e)
         return dp_de_aft(e)
 
-    # load the hadronic eos
+    #==================== hadronic eos ======================#
 
     with open(eos,"r") as f: x = f.read().strip().split("\n")
     x = list(map(lambda s:list(map(float, s.split())),x))
@@ -48,11 +50,11 @@ def quark_eos(e0,e1,e2=None,e_qcd=None,eos="eosSLy",
     _dp_de = _p_at_e.derivative()
     p_at_e_old = lambda x:np.exp(_p_at_e(np.log(x)))
 
+    #================== phase transition ===================#
+
     p0 = p_at_e_old(e0)
 
     assert e1>e0, ValueError("e1<=e0!")
-
-    # construct phase transition
 
     if construction=="Maxwell":
         p1 = p0
@@ -78,7 +80,7 @@ def quark_eos(e0,e1,e2=None,e_qcd=None,eos="eosSLy",
                 0 if e < e2 else\
                 1/( A/Gama * p_at_e_tr(e)**(1/Gama-1) + 1/c**2/(Gama-1) )
 
-    # after phase transition
+    #================ constant sound speed =================#
 
     if e_qcd == None:
         p_at_e_aft = lambda e: c**2 * (e-e1) * ss1**2 + p1
@@ -91,6 +93,8 @@ def quark_eos(e0,e1,e2=None,e_qcd=None,eos="eosSLy",
                 c**2 * (e-e_qcd) * ss2**2 + p2
         dp_de_aft = lambda e:\
                 c**2 * ss1**2 if e < e_qcd else c**2 * ss2**2
+
+    #==================== integration ======================#
 
     e = np.concatenate((
         e[e<e0],
