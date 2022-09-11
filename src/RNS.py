@@ -262,8 +262,10 @@ class RNS:
     def refine(self):
         """make finer grid around the transition"""
         if self.eos.start > 0 and self.ec > self.e0:
-            mask = (self.energy <= self.e1+1e-3)\
-                    & (self.energy >= self.e0-1e-3)
+            mask = (self.energy <= self.e1) & (self.energy >= self.e0)
+            if not mask.any():
+                mask = self.energy > self.e0
+                mask = mask[:-1] ^ mask[1:]
             #i,j = np.where(mask[:-1] ^ mask[1:])
             i,j = np.where(mask)
             s0 = max(self.s_gp[min(i)+1], 0)
