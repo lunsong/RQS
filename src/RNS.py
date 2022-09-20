@@ -33,7 +33,7 @@ class RNS:
         self.print_dif    = 0
         self.max_n        = 10
         self.max_refine   = 20
-        self.criteria     = 4
+        self.criteria     = 6
         self.throw        = True
 
         # hierarchial grid
