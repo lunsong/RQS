@@ -4,7 +4,7 @@ from scipy.integrate import solve_ivp
 from scipy.interpolate import CubicSpline
 
 from collections import namedtuple
-EOS = namedtuple("EOS",["e","p","h","n0","n_tab","start","end"])
+EOS = namedtuple("EOS",["e","p","h","n0","n_tab","start","end","e0","e1"])
 
 from os.path import exists
 
@@ -12,7 +12,7 @@ c  = 2.99792458e10
 Mb = 1.66e-24
 
 def quark_eos(e0,e1,e2=None,e_qcd=None,eos="eosSLy",
-        construction="Maxwell", ss1=1/np.sqrt(3),ss2=None,Gama=1.03):
+        cons="Maxwell", ss1=1/np.sqrt(3),ss2=None,Gama=1.03):
     """
     Quark Star EoS, all in cgs unit
     e0,e1 are the starting and ending energy density of the phase
@@ -56,12 +56,12 @@ def quark_eos(e0,e1,e2=None,e_qcd=None,eos="eosSLy",
 
     assert e1>e0, ValueError("e1<=e0!")
 
-    if construction=="Maxwell":
+    if cons=="Maxwell":
         p1 = p0
         p_at_e_tr = lambda e: p0
         dp_de_tr = lambda e: 0
 
-    elif construction=="Gibbs":
+    elif cons=="Gibbs":
         A = (e0 - p0/c**2/(Gama-1)) * p0**(-1/Gama)
         poly = lambda p: A*p**(1/Gama)+p/c**2/(Gama-1)
         p1 = ridder(lambda p: poly(p)-e1, p0, p0*10)
@@ -69,7 +69,7 @@ def quark_eos(e0,e1,e2=None,e_qcd=None,eos="eosSLy",
         dp_de_tr = lambda e: 1/(
                 A/Gama * p_at_e_tr(e)**(1/Gama-1) + 1/c**2/(Gama-1) )
 
-    elif construction=="Maxwell-Gibbs":
+    elif cons=="Maxwell-Gibbs":
         A = (e2 - p0/c**2/(Gama-1)) * p0**(-1/Gama)
         poly = lambda p: A*p**(1/Gama)+p/c**2/(Gama-1)
         p1 = ridder(lambda p: poly(p)-e1, p0, p0*10)
@@ -110,5 +110,9 @@ def quark_eos(e0,e1,e2=None,e_qcd=None,eos="eosSLy",
 
     h = solve_ivp(lambda t,y:dp_de(t)/(t+p_at_e(t)/c**2),
             (e[0],e[-1]),(h[0],),t_eval=e,rtol=1e-14).y[0]
+    
+    if cons == "Maxwell": _e0 = e0; _e1 = e1
+    if cons == "Gibbs": _e0 = _e1 = None
+    if cons == "Maxwell-Gibbs": _e0 = e0; _e1 = e2
 
-    return EOS(e,p,h,n,e.shape[0],sum(e<=e0), sum(e<=e1))
+    return EOS(e,p,h,n,e.shape[0],sum(e<=e0), sum(e<=e1), _e0, _e1)

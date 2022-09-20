@@ -234,9 +234,10 @@ class RNS:
         self.p_at_e = interp1d(self.lg_e[1:],self.lg_p[1:])
         self.rns.set_transition(eos.start, eos.end)
 
-        if eos.start > 0:
-            self.e0 = eos.e[eos.start-1]/1e15
-            self.e1 = eos.e[eos.end-1]/1e15
+        if eos.e0 != None:
+            self.e0 = eos.e0 / 1e15
+            self.e1 = eos.e1 / 1e15
+        else: self.e0 = self.e1 = None
 
     @property
     def ec(self):
@@ -261,7 +262,7 @@ class RNS:
 
     def refine(self):
         """make finer grid around the transition"""
-        if self.eos.start > 0 and self.ec > self.e0:
+        if self.e0 != None and self.ec > self.e0:
             mask = (self.energy <= self.e1) & (self.energy >= self.e0)
             if not mask.any():
                 mask = self.energy > self.e0
