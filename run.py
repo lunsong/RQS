@@ -4,10 +4,10 @@ from time import gmtime
 from quark_eos import quark_eos
 from scipy.optimize import fminbound
 
-rns = RNS(MDIV=65, SDIV=101)
+rns = RNS(MDIV=65, SDIV=201)
 
 #rns.eos = load_quark_eos(1., 1.235, .3,"eosNL3")
-rns.eos = quark_eos(1,1.6,1.3,cons="Maxwell-Gibbs", ss1=1.,Gama=1.03)
+rns.eos = quark_eos(.6,1.,cons="Maxwell", eos="eosNL3",ss1=.9)
 
 #rns.hierarchy.length[:] = [.02, .04, .08]
 
@@ -15,31 +15,29 @@ rns.p_surface = 1e-8
 
 dr = .05
 rns.cf = 1.
-rns.acc = 1e-7
 rns.r_ratio = .7
-rns.criteria = 6
-rns.max_refine = 20
-rns.throw = False
 no_refine = False
 M0 = None
 name = "b"
-task = None
-no_save = True
+no_save = False
+task = "gap"
+
 if task=="M0":
-    dec = 2e-2
+    dec = 1e-2
 else:
-    dec = 2e-1
+    dec = 3e-1
 
 rns.ec = rns.e1 + 1e-3 
-end_ec = rns.e1 + dec * 10
+end_ec = rns.e1 + dec * 20
 
 if task == "TOV_max_M":
     rns.ec = 2.1
     end_ec = 5.0
 
+if task == "gap":
+    end_ec = rns.ec + .4
+
 load = lambda name: np.load(f"out/{name}.npy")
-
-
 
 date = gmtime()
 name = f"out/{date.tm_mon}{date.tm_mday}-{name}-{task}"
@@ -67,6 +65,15 @@ elif task == "stable":
     rns.spin(rns.r_ratio, rns.e1 + 1e-3)
     print(rns.is_stable())
     task=None
+
+elif task == "gap":
+    J = rns.spin(rns.r_ratio).J
+    def f(x):
+        ridder(lambda z: rns.spin(z,x).J/J-1,
+                rns.r_ratio+.1, rns.r_ratio-.1, xtol=1e-5)
+        return rns.M.value / msol
+    ec,M,_,_=fminbound(f, rns.ec, end_ec, disp=3, full_output=True)
+    print(ec, M)
 
 
 series = []

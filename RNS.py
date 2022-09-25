@@ -29,12 +29,12 @@ class RNS:
 
         # default parameters
         self.cf           = 1.
-        self.acc          = 1e-5
+        self.acc          = 1e-7
         self.print_dif    = 0
         self.max_n        = 10
         self.max_refine   = 20
         self.criteria     = 6
-        self.throw        = True
+        self.throw        = False
 
         # hierarchial grid
         hierarchy = namedtuple("grid_hierarchy",["dx","length"])
