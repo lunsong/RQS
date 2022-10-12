@@ -25,6 +25,7 @@ class RNS:
         rns.max_refine = 20
         hierarchy.dx = [dx/27, dx/9, dx/3, dx]
         hierarchy.length = [.01, .03, .09]
+        print(rns.spin(ec=2., r_ratio=.8).M)
         """
 
         # default parameters

@@ -7,7 +7,7 @@ from scipy.optimize import fminbound
 rns = RNS(MDIV=65, SDIV=201)
 
 #rns.eos = load_quark_eos(1., 1.235, .3,"eosNL3")
-rns.eos = quark_eos(.6,1.,cons="Maxwell", eos="eosNL3",ss1=.9)
+rns.eos = quark_eos(.4,.7, cons="Maxwell", eos="eosNL3",ss1=.9)
 
 #rns.hierarchy.length[:] = [.02, .04, .08]
 
@@ -15,20 +15,20 @@ rns.p_surface = 1e-8
 
 dr = .05
 rns.cf = 1.
-rns.r_ratio = .7
+rns.r_ratio = .8
 no_refine = False
 M0 = None
-name = "b"
+name = "3"
 no_save = False
-task = "gap"
+task = "M0"
 
 if task=="M0":
-    dec = 1e-2
+    dec = -1e-3
 else:
-    dec = 3e-1
+    dec = 5e-1
 
-rns.ec = rns.e1 + 1e-3 
-end_ec = rns.e1 + dec * 20
+rns.ec = rns.e0 - 1e-3
+end_ec = rns.ec + dec * 30
 
 if task == "TOV_max_M":
     rns.ec = 2.1
